@@ -1,19 +1,16 @@
-# #!/usr/bin/env python
-# import rospy
-# from std_msgs.msg import String
-# from geometry_msgs.msg import PoseStamped #4 Angle Data to 3
-# from sensor_msgs.msg import LaserScan #20 LAser Data
+#!/usr/bin/env python3
+import rospy
+from std_msgs.msg import String
+from geometry_msgs.msg import PoseStamped #4 Angle Data to 3
+from sensor_msgs.msg import LaserScan #20 LAser Data
 import torch
 import torch.nn as nn
 from torch.distributions import MultivariateNormal
 import gym
 import numpy as np
-from mlagents_envs.environment import UnityEnvironment
-from mlagents_envs.side_channel.engine_configuration_channel import EngineConfig, EngineConfigurationChannel
-from torch.utils.tensorboard import SummaryWriter
+#from torch.utils.tensorboard import SummaryWriter
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
 
 class Memory:
     def __init__(self):
@@ -146,6 +143,50 @@ class PPO:
         # Copy new weights into old policy:
         self.policy_old.load_state_dict(self.policy.state_dict())
 
+class Node():
+    def __init__(self):
+        # Params
+        self.UWBPosX=0
+        self.UWBPosY=0
+        self.LaserScan=[]
+        # Node cycle rate (in Hz).
+        self.loop_rate = rospy.Rate(10)
+        string = String()
+        laser = LaserScan()
+        data = PoseStamped() 
+        # Publishers
+        self.pub = rospy.Publisher("~chatter1", std_msgs.msg.Float64, queue_size=10)
+        # Subscribers
+        #rospy.Subscriber("/UWBPosition", String, self.callback_Pos) 
+        rospy.Subscriber("/scan", LaserScan, self.callback_range) 
+        #rospy.Subscriber("/mavros/local_position/pose", PoseStamped, self.callback_RPY) 
+        #rospy.Subscriber("~chatter2", std_msgs.msg.Float64, self.callback)
+
+    #def callback(self, msg):
+        #rospy.loginfo("x1: {}".format(self.x1))
+
+    def callback_Pos(self,string):   
+        #self.str = string.
+        
+    def callback_range(self, laser):            
+        #print(self.str[1])
+        for i in range(12):
+            self,LaserScan.append(i)        
+    def callback_RPY(self, data):    
+        #print("{}, {}, {}, {}".format(data.pose.orientation.x,data.pose.orientation.y,data.pose.orientation.z,data.pose.orientation.w))    
+
+    def Start():
+        rospy.init_node('listener', anonymous=True)
+        string = String()
+        laser = LaserScan()
+        data = PoseStamped()  
+        rospy.Subscriber("/UWBPosition", String, callback_Pos) 
+        rospy.Subscriber("/scan", LaserScan, callback_range) 
+        rospy.Subscriber("/mavros/local_position/pose", PoseStamped, callback_RPY) 
+        rospy.spin()
+
+
+
 
 def main():
     ############## Hyperparameters ##############
@@ -199,9 +240,9 @@ def main():
 
     # training loop
     for i_episode in range(1, max_episodes + 1):
-        env.reset()
-        step_result = env.get_step_result(group_name)
-        state = step_result.obs[0]
+        #env.reset()
+        #step_result = env.get_step_result(group_name)
+        state = 0  #step_result.obs[0]
         for t in range(max_timesteps):
             time_step += 1
             # Running policy_old:
@@ -252,7 +293,11 @@ def main():
             avg_length = 0
 
 
+
 if __name__ == '__main__':
-    main()
+    my_node = Node()
+    my_node.start()
+    #listener()
+    #main()
 
 

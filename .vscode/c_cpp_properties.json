@@ -1,0 +1,23 @@
+{
+  "configurations": [
+    {
+      "browse": {
+        "databaseFilename": "",
+        "limitSymbolsToIncludedHeaders": true
+      },
+      "includePath": [
+        "/home/gtg4059/catkin_ws/devel/include/**",
+        "/opt/ros/melodic/include/**",
+        "/home/gtg4059/catkin_ws/src/beginner_tutorials/include/**",
+        "/home/gtg4059/catkin_ws/src/mavros/libmavconn/include/**",
+        "/home/gtg4059/catkin_ws/src/mavros/mavros/include/**",
+        "/home/gtg4059/catkin_ws/src/mavros/mavros_msgs/include/**",
+        "/home/gtg4059/catkin_ws/src/rosserial/rosserial_server/include/**",
+        "/home/gtg4059/catkin_ws/src/rosserial/rosserial_test/include/**",
+        "/home/gtg4059/catkin_ws/src/mavros/test_mavros/include/**",
+        "/usr/include/**"
+      ],
+      "name": "ROS"
+    }
+  ]
+}

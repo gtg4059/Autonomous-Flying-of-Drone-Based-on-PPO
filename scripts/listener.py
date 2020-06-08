@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 import rospy
 from std_msgs.msg import String
 from geometry_msgs.msg import PoseStamped
@@ -9,8 +9,9 @@ from sensor_msgs.msg import LaserScan
 # pub_setpoint = rospy.Publisher("mavros/setpoint_position/local",PoseStamped)
 
 def callback(data):    
-    print("{}, {}, {}, {}".format(data.pose.orientation.x,data.pose.orientation.y,data.pose.orientation.z,data.pose.orientation.w))
-    
+    #print("{}, {}, {}, {}".format(data.pose.orientation.x,data.pose.orientation.y,data.pose.orientation.z,data.pose.orientation.w))
+    self.str = data.pose.orientation.x
+    print(self.str)
     #asdasdsdasdsadsad
 
     
