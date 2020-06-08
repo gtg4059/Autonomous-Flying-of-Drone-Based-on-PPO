@@ -6,8 +6,10 @@ from sensor_msgs.msg import LaserScan #20 LAser Data
 import torch
 import torch.nn as nn
 from torch.distributions import MultivariateNormal
-import gym
+import math
+#import gym
 import numpy as np
+import tf
 #from torch.utils.tensorboard import SummaryWriter
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -146,44 +148,48 @@ class PPO:
 class Node():
     def __init__(self):
         # Params
-        self.UWBPosX=0
-        self.UWBPosY=0
-        self.LaserScan=[]
+        self.LaserData=np.zeros(12) #12
+        self.TargetPolar = 0
+        self.UWBPos=[] #2
+        self.Pos=[]
+        self.Vel=[]
+        self.TargetPos = [20,20]
         # Node cycle rate (in Hz).
-        self.loop_rate = rospy.Rate(10)
+        loop_rate = rospy.Rate(10)
         string = String()
         laser = LaserScan()
         data = PoseStamped() 
         # Publishers
-        self.pub = rospy.Publisher("~chatter1", std_msgs.msg.Float64, queue_size=10)
+        #self.pub = rospy.Publisher("~chatter1", std_msgs.msg.Float64, queue_size=10)
         # Subscribers
         #rospy.Subscriber("/UWBPosition", String, self.callback_Pos) 
-        rospy.Subscriber("/scan", LaserScan, self.callback_range) 
-        #rospy.Subscriber("/mavros/local_position/pose", PoseStamped, self.callback_RPY) 
-        #rospy.Subscriber("~chatter2", std_msgs.msg.Float64, self.callback)
-
-    #def callback(self, msg):
-        #rospy.loginfo("x1: {}".format(self.x1))
+        #rospy.Subscriber("/scan", LaserScan, self.callback_range) 
+        rospy.Subscriber("/mavros/local_position/pose", PoseStamped, self.callback_RPY) 
+        #rospy.Subscriber("/mavros/local_position/velocity_body", PoseStamped, self.callback_Vel)
+        #rospy.Subscriber("~chatter2", std_msgs.msg.Float64, self.callback) 
 
     def callback_Pos(self,string):   
-        #self.str = string.
-        
+        #self.str = ""
+        self.UWBPos=list(map(float, string.data.split(',')))
+        self.TargetPolar = math.sin()
+        print(self.UWBPos)
+    #def callback_Vel(self, laser):
+
     def callback_range(self, laser):            
         #print(self.str[1])
         for i in range(12):
-            self,LaserScan.append(i)        
-    def callback_RPY(self, data):    
-        #print("{}, {}, {}, {}".format(data.pose.orientation.x,data.pose.orientation.y,data.pose.orientation.z,data.pose.orientation.w))    
+            self.LaserData[i] = laser.ranges[i*20]
+        #print(self.LaserData)    
+    def callback_RPY(self, data): 
+        self.Pos=tf.transformations.euler_from_quaternion(data.pose.orientation)
+        print(self.Pos) 
 
-    def Start():
-        rospy.init_node('listener', anonymous=True)
-        string = String()
-        laser = LaserScan()
-        data = PoseStamped()  
-        rospy.Subscriber("/UWBPosition", String, callback_Pos) 
-        rospy.Subscriber("/scan", LaserScan, callback_range) 
-        rospy.Subscriber("/mavros/local_position/pose", PoseStamped, callback_RPY) 
+    def Start(self):
+        #rospy.Subscriber("/UWBPosition", String, callback_Pos) 
+        #rospy.Subscriber("/scan", LaserScan, callback) 
+        #rospy.Subscriber("/mavros/local_position/pose", PoseStamped, callback_RPY) 
         rospy.spin()
+ 
 
 
 
@@ -295,8 +301,9 @@ def main():
 
 
 if __name__ == '__main__':
+    rospy.init_node('listener', anonymous=True) 
     my_node = Node()
-    my_node.start()
+    my_node.Start()
     #listener()
     #main()
 
