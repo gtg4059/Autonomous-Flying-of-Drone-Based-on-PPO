@@ -9,7 +9,6 @@ from torch.distributions import MultivariateNormal
 import math
 #import gym
 import numpy as np
-import tf
 #from torch.utils.tensorboard import SummaryWriter
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -171,8 +170,8 @@ class Node():
     def callback_Pos(self,string):   
         #self.str = ""
         self.UWBPos=list(map(float, string.data.split(',')))
-        self.TargetPolar = math.sin()
-        print(self.UWBPos)
+        #self.TargetPolar = tf.transformations.euler_from_quaternion(self.Pos)
+        print(self.TargetPolar)
     #def callback_Vel(self, laser):
 
     def callback_range(self, laser):            
