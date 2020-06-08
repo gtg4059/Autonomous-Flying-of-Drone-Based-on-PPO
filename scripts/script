@@ -1,0 +1,130 @@
+#!/usr/bin/env python
+
+import rospy
+from geometry_msgs.msg import Twist
+from geometry_msgs.msg import Vector3Stamped
+from geometry_msgs.msg import Vector3
+
+from math import radians
+from sensor_msgs.msg import NavSatFix
+import time
+import numpy
+
+global lat1
+global long1
+
+Class Foo: 
+
+def call_head(um6):
+    z = um6.vector.z
+    y = um6.vector.y
+
+    self.angles = Vector3()
+
+    self.heading = numpy.rad2deg(numpy.arctan2(z, y)) + 90
+
+    self.angles.x = self.heading
+    self.angles.z = self.bearing
+
+    self.send_bear_ = True
+    return "done heading"
+
+
+def call_nav(navsat):
+
+
+    self.angles = Vector3()
+
+    self.lat1 = navsat.latitude
+    self.long1 = navsat.longitude
+
+    dLon = self.long2 - self.long1
+    y = numpy.sin(dLon) * numpy.cos(self.lat2)
+    x = numpy.cos(lat1)*numpy.sin(self.lat2) - numpy.sin(self.lat1)*numpy.cos(self.lat2)*numpy.cos(dLon)
+
+    self.bearing = (numpy.rad2deg(numpy.arctan2(y, x)) + 360) % 360
+
+    self.angles.z = self.bearing
+
+    self.send_nav_ = True
+
+    return "done bearing"
+
+def call_move(data):
+
+    move_cmd = Twist()
+    turn_cmd = Twist()
+
+
+
+    move_cmd.linear.x = 2
+    turn_cmd.angular.z = radians(45)
+
+    self.heading = data.z
+    self.bearing = data.x
+
+
+    turn_angle = self.heading - self.bearing
+
+    rospy.loginfo("bearing: %s", self.bearing)
+    rospy.loginfo("heading: %s", self.heading)
+
+
+    if (turn_angle > 180):
+        turn_angle -= 360
+    elif (turn_angle < -180):
+        turn_angle += 360
+    else:
+        turn_angle = turn_angle
+
+    if (abs(self.lat1-self.lat2)<.0005 and abs(self.long1-self.long2)<.0005):
+        self.pub_msg = Twist()
+    else:
+        if (abs(turn_angle) < 8):
+            self.pub_msg = move_cmd
+        else:
+            self.pub_msg = turn_cmd
+    self.send_msg_ = True
+    return "done move"      
+
+
+
+def __init__(self):
+
+    self.pub_msg = Twist()
+    self.heading = #someinit val
+    self.bearing = #someinit val
+    self.send_msg_ = False
+    self.send_bear_ = False
+    self.send_ = False
+    self.angles = Vector3()
+    self.lat1 = #someinit val
+    self.lat2 = #someinit val
+    ###########################################################
+    self.lat2 = 30.210406
+    #                                   Destination
+    self.long2 = -92.022914
+    ############################################################
+
+    rospy.Subscriber("/imu_um6/mag", Vector3Stamped, self.call_head)
+    rospy.Subscriber("/gps/fix", NavSatFix, self.call_nav)
+    rospy.Subscriber("navStuff", Vector3, self.call_move)
+    pub = rospy.Publisher('/husky_velocity_controller/cmd_vel', Twist, queue_size=10)
+    call_bear_pub = rospy.Publisher("navStuff", Vector3, queue_size=10)
+    call_nav_pub = rospy.Publisher("navStuff", Vector3, queue_size=10)
+    while not rospy.is_shutdown():
+        if self.send_msg_:
+            pub.publish(self.pub_msg)
+            self.send_msg_ = False
+        if self.send_bear_:
+            call_bear_pub.publish(self.angles)
+            self.send_bear_ = False
+        if self.send_nav_:
+            call_nav_pub.publish(self.angles)
+            self.send_nav_ = False
+ 
+if __name__ == '__main__':
+    rospy.init_node('navigate_that_husky')
+    try:
+        foo = Foo()
+    except rospy.ROSInterruptException:  pass
