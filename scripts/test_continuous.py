@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import rospy
 from std_msgs.msg import String
-from geometry_msgs.msg import PoseStamped #4 Angle Data to 3
+from geometry_msgs.msg import PoseStamped, TwistStamped #4 Angle Data to 3
 from sensor_msgs.msg import LaserScan #20 LAser Data
 import torch
 import torch.nn as nn
@@ -9,6 +9,7 @@ from torch.distributions import MultivariateNormal
 import math
 #import gym
 import numpy as np
+from squaternion import Quaternion
 #from torch.utils.tensorboard import SummaryWriter
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -149,22 +150,23 @@ class Node():
         # Params
         self.LaserData=np.zeros(12) #12
         self.TargetPolar = 0
-        self.UWBPos=[] #2
-        self.Pos=[]
-        self.Vel=[]
+        self.UWBPos=() #2
+        self.Pos=()
+        self.Vel=()
         self.TargetPos = [20,20]
         # Node cycle rate (in Hz).
-        loop_rate = rospy.Rate(10)
+        loop_rate = rospy.Rate(100)
         string = String()
         laser = LaserScan()
-        data = PoseStamped() 
+        Posedata = PoseStamped() 
+        Veldata = TwistStamped()
         # Publishers
         #self.pub = rospy.Publisher("~chatter1", std_msgs.msg.Float64, queue_size=10)
         # Subscribers
         #rospy.Subscriber("/UWBPosition", String, self.callback_Pos) 
-        #rospy.Subscriber("/scan", LaserScan, self.callback_range) 
+        rospy.Subscriber("/scan", LaserScan, self.callback_range) 
         rospy.Subscriber("/mavros/local_position/pose", PoseStamped, self.callback_RPY) 
-        #rospy.Subscriber("/mavros/local_position/velocity_body", PoseStamped, self.callback_Vel)
+        rospy.Subscriber("/mavros/local_position/velocity_body", TwistStamped, self.callback_Vel)
         #rospy.Subscriber("~chatter2", std_msgs.msg.Float64, self.callback) 
 
     def callback_Pos(self,string):   
@@ -172,15 +174,19 @@ class Node():
         self.UWBPos=list(map(float, string.data.split(',')))
         #self.TargetPolar = tf.transformations.euler_from_quaternion(self.Pos)
         print(self.TargetPolar)
-    #def callback_Vel(self, laser):
-
+    def callback_Vel(self, Veldata):
+        self.Vel = (Veldata.twist.linear.x,Veldata.twist.linear.y,Veldata.twist.linear.z)
+        print(self.Vel)
     def callback_range(self, laser):            
         #print(self.str[1])
         for i in range(12):
             self.LaserData[i] = laser.ranges[i*20]
-        #print(self.LaserData)    
-    def callback_RPY(self, data): 
-        self.Pos=tf.transformations.euler_from_quaternion(data.pose.orientation)
+        print(self.LaserData)    
+    def callback_RPY(self, Posedata): 
+        #self.Pos=tf.transformations.euler_from_quaternion(data.pose.orientation)
+        q = Quaternion(Posedata.pose.orientation.w,Posedata.pose.orientation.x,\
+            Posedata.pose.orientation.y,Posedata.pose.orientation.z)
+        self.Pos = q.to_euler(degrees=True)
         print(self.Pos) 
 
     def Start(self):
@@ -189,8 +195,6 @@ class Node():
         #rospy.Subscriber("/mavros/local_position/pose", PoseStamped, callback_RPY) 
         rospy.spin()
  
-
-
 
 
 def main():
