@@ -6,7 +6,7 @@ from sensor_msgs.msg import LaserScan #20 LAser Data
 import torch
 import torch.nn as nn
 from torch.distributions import MultivariateNormal
-import math
+from math import *
 #import gym
 import numpy as np
 from squaternion import Quaternion
@@ -150,9 +150,10 @@ class Node():
         # Params
         self.LaserData=np.zeros(12) #12
         self.TargetPolar = 0
-        self.UWBPos=() #2
-        self.Pos=()
-        self.Vel=()
+        self.UWBPos=(0,0) #2
+        self.Pos=(0,0)
+        self.Dir=(0,0)
+        self.Mag=0
         self.TargetPos = [20,20]
         # Node cycle rate (in Hz).
         loop_rate = rospy.Rate(100)
@@ -163,31 +164,33 @@ class Node():
         # Publishers
         #self.pub = rospy.Publisher("~chatter1", std_msgs.msg.Float64, queue_size=10)
         # Subscribers
-        #rospy.Subscriber("/UWBPosition", String, self.callback_Pos) 
-        rospy.Subscriber("/scan", LaserScan, self.callback_range) 
-        rospy.Subscriber("/mavros/local_position/pose", PoseStamped, self.callback_RPY) 
-        rospy.Subscriber("/mavros/local_position/velocity_body", TwistStamped, self.callback_Vel)
+        rospy.Subscriber("/UWBPosition", String, self.callback_Pos) 
+        rospy.Subscriber("/scan", LaserScan, self.callback_range) #RayinformContain
+        rospy.Subscriber("/mavros/local_position/pose", PoseStamped, self.callback_RPY) #CrntAngle
+        rospy.Subscriber("/mavros/local_position/velocity_body", TwistStamped, self.callback_Vel) #CrntDir
         #rospy.Subscriber("~chatter2", std_msgs.msg.Float64, self.callback) 
 
     def callback_Pos(self,string):   
         #self.str = ""
-        self.UWBPos=list(map(float, string.data.split(',')))
-        #self.TargetPolar = tf.transformations.euler_from_quaternion(self.Pos)
-        print(self.TargetPolar)
+        self.UWBPos=tuple(map(float, string.data.split(',')))
+        targetdir = [self.TargetPos[0]-self.UWBPos[0],self.TargetPos[1]-self.UWBPos[1]]
+        self.TargetPolar = (atan2(self.Dir[1],self.Dir[0]) - atan2(targetdir[1],targetdir[0]))/pi
+        #print("targetdir:",targetdir,"Dir:",self.Dir)
+        print("UWB:",self.UWBPos,"TPOLAR:",self.TargetPolar)
     def callback_Vel(self, Veldata):
-        self.Vel = (Veldata.twist.linear.x,Veldata.twist.linear.y,Veldata.twist.linear.z)
-        print(self.Vel)
-    def callback_range(self, laser):            
-        #print(self.str[1])
+        n = np.array([Veldata.twist.linear.x, Veldata.twist.linear.y])
+        self.Mag = np.linalg.norm(n)
+        self.Dir = n/self.Mag
+        #print("MAG:",self.Mag,"DIR:",self.Dir)
+    def callback_range(self, laser):
         for i in range(12):
             self.LaserData[i] = laser.ranges[i*20]
-        print(self.LaserData)    
+        #print("Laser:",tuple(self.LaserData))    
     def callback_RPY(self, Posedata): 
-        #self.Pos=tf.transformations.euler_from_quaternion(data.pose.orientation)
         q = Quaternion(Posedata.pose.orientation.w,Posedata.pose.orientation.x,\
             Posedata.pose.orientation.y,Posedata.pose.orientation.z)
         self.Pos = q.to_euler(degrees=True)
-        print(self.Pos) 
+        print("Pose:",self.Pos) 
 
     def Start(self):
         #rospy.Subscriber("/UWBPosition", String, callback_Pos) 

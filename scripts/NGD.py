@@ -5,15 +5,15 @@ import numpy as np
 class CalculatePosition:
     def __init__(self):
         #self.Serialdata
-        self.avg_resultx = 0
-        self.avg_resulty = 0
+        self.avg_resultx = 0.01
+        self.avg_resulty = 0.01
         self.avg_resultz = 1
-        self.anchor_point = [[0.01, 0.01, 1.28],
-                        [0.01, 7.03, 1.80],
-                        [9.30, 0.01, 1.63],
-                        [9.05, 7.03, 1.80],
-                        [18.35, 0.01, 1.63],
-                        [18.35, 7.03, 1.63]]
+        self.anchor_point = [[0.01, 0.01, 1.6],
+                        [0.01, 7.2, 1.6],
+                        [4.05, 0.01, 1.6],
+                        [4.05, 7.2, 1.6],
+                        [6, 0.01, 1.6],
+                        [6, 7.2, 1.6]]
         self.boundaryXmax = 19.01
         self.boundaryXmin = 0.01
         self.boundaryYmax = 7.05
