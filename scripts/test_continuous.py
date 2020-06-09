@@ -154,7 +154,8 @@ class Node():
         self.Pos=(0,0)
         self.Dir=(0,0)
         self.Mag=0
-        self.TargetPos = [20,20]
+        self.TargetDist=0
+        self.TargetPos = [1.6,3.6]
         # Node cycle rate (in Hz).
         loop_rate = rospy.Rate(100)
         string = String()
@@ -173,10 +174,11 @@ class Node():
     def callback_Pos(self,string):   
         #self.str = ""
         self.UWBPos=tuple(map(float, string.data.split(',')))
-        targetdir = [self.TargetPos[0]-self.UWBPos[0],self.TargetPos[1]-self.UWBPos[1]]
+        targetdir = np.array([self.TargetPos[0]-self.UWBPos[0],self.TargetPos[1]-self.UWBPos[1]])
+        self.TargetDist = np.linalg.norm(targetdir)/(1+Abs(np.linalg.norm(targetdir)))
         self.TargetPolar = (atan2(self.Dir[1],self.Dir[0]) - atan2(targetdir[1],targetdir[0]))/pi
         #print("targetdir:",targetdir,"Dir:",self.Dir)
-        print("UWB:",self.UWBPos,"TPOLAR:",self.TargetPolar)
+        print("UWB:",self.UWBPos,"TPOLAR:",self.TargetPolar,"TDist:",self.TargetDist)
     def callback_Vel(self, Veldata):
         n = np.array([Veldata.twist.linear.x, Veldata.twist.linear.y])
         self.Mag = np.linalg.norm(n)
@@ -192,10 +194,7 @@ class Node():
         self.Pos = q.to_euler(degrees=True)
         print("Pose:",self.Pos) 
 
-    def Start(self):
-        #rospy.Subscriber("/UWBPosition", String, callback_Pos) 
-        #rospy.Subscriber("/scan", LaserScan, callback) 
-        #rospy.Subscriber("/mavros/local_position/pose", PoseStamped, callback_RPY) 
+    def Start(self): 
         rospy.spin()
  
 
