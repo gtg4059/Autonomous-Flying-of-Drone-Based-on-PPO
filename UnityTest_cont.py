@@ -143,9 +143,11 @@ class PPO:
 def main():
     ############## Hyperparameters ##############
     render = False
+
+
     solved_reward = 300  # stop training if avg_reward > solved_reward
     log_interval = 20  # print avg reward in the interval
-    max_episodes = 50000  # max training episodes
+    max_episodes = 10000  # max training episodes
     max_timesteps = 1500  # max timesteps in one episode
 
     update_timestep = 4000  # update policy every n timesteps
@@ -170,8 +172,12 @@ def main():
     group_name = env.get_agent_groups()[0]
     group_spec = env.get_agent_group_spec(group_name)
 
+    # filename and directory to load model from
+    filename = "PPO_continuous_DR.pth"
+    directory = "./scripts/"
+
     # Set the time scale of the engine
-    engine_configuration_channel.set_configuration_parameters(time_scale=30)
+    engine_configuration_channel.set_configuration_parameters(time_scale=1)
 
     # Get the state of the agents
     step_result = env.get_step_result(group_name)
@@ -183,6 +189,7 @@ def main():
 
     memory = Memory()
     ppo = PPO(state_dim, action_dim, action_std, lr, betas, gamma, K_epochs, eps_clip)
+    ppo.policy_old.load_state_dict(torch.load(directory + filename))
     print(lr, betas)
 
     # logging variables
@@ -206,43 +213,9 @@ def main():
             state = step_result.obs[0][0]  # get the next states for each unity agent in the environment
             reward = step_result.reward[0]  # get the rewards for each unity agent in the environment
             done = step_result.done[0]  # see if episode has finished for each unity agent in the environment
-            # state, reward, done, _ = env.step(action)
 
-            # Saving reward and is_terminals:
-            memory.rewards.append(reward)
-            memory.is_terminals.append(done)
-
-            # update if its time
-            if time_step % update_timestep == 0:
-                ppo.update(memory)
-                memory.clear_memory()
-                time_step = 0
             running_reward += reward
-            if done:
-                break
-
-        avg_length += t
-        writer.add_scalar('rewards', reward, i_episode)
-        # stop training if avg_reward > solved_reward
-        if running_reward > (log_interval * solved_reward):
-            print("########## Solved! ##########")
-            torch.save(ppo.policy.state_dict(), './PPO_continuous_DR.pth')
-            break
-
-        # save every 500 episodes
-        if i_episode % 500 == 0:
-            torch.save(ppo.policy.state_dict(), './PPO_continuous_DR.pth')
-
-        # logging
-        if i_episode % log_interval == 0:
-            avg_length = int(avg_length / log_interval)
-            running_reward = int((running_reward / log_interval))
-
-            print('Episode {} \t Avg length: {} \t Avg reward: {}'.format(i_episode, avg_length, running_reward))
-            running_reward = 0
-            avg_length = 0
 
 
 if __name__ == '__main__':
     main()
-
