@@ -151,7 +151,7 @@ class Node():
         self.LaserData=np.zeros(12) #12
         self.TargetPolar = 0
         self.UWBPos=(0,0) #2
-        self.Pos=(0,0)
+        self.Pos=(0,0,0)
         self.Dir=(0,0)
         self.Mag=0
         self.TargetDist=0
@@ -194,12 +194,12 @@ class Node():
     def callback_RPY(self, imu): 
         q = Quaternion(imu.orientation.w,imu.orientation.x,\
             imu.orientation.y,imu.orientation.z)
-        self.Pos = q.to_euler(degrees=True)
-        print("Pose:",self.Pos) 
+        e = q.to_euler(degrees=True)
+        #self.Pos=(eq[0],eq[1],eq[2])*pi/180
+        print("Pose:",e) 
 
     def Start(self): 
         P = PoseStamped() 
-
         self.pub.publish()
         rospy.spin()
  
@@ -224,7 +224,6 @@ def main():
 
     random_seed = None
     #############################################
-    #writer = SummaryWriter('runs/PPO_continuous_1')
 
     # Set the number of actions or action size
     action_dim = 3
@@ -233,6 +232,7 @@ def main():
 
     memory = Memory()
     ppo = PPO(state_dim, action_dim, action_std, lr, betas, gamma, K_epochs, eps_clip)
+    ppo.policy_old.load_state_dict(torch.load(directory + filename))
     print(lr, betas)
 
     # logging variables
@@ -242,9 +242,9 @@ def main():
 
     # training loop
     for i_episode in range(1, max_episodes + 1):
-        #env.reset()
-        #step_result = env.get_step_result(group_name)
-        state = 0  #step_result.obs[0]
+        env.reset()
+        step_result = env.get_step_result(group_name)
+        state = step_result.obs[0]
         for t in range(max_timesteps):
             time_step += 1
             # Running policy_old:
@@ -256,43 +256,8 @@ def main():
             state = step_result.obs[0][0]  # get the next states for each unity agent in the environment
             reward = step_result.reward[0]  # get the rewards for each unity agent in the environment
             done = step_result.done[0]  # see if episode has finished for each unity agent in the environment
-            # state, reward, done, _ = env.step(action)
 
-            # Saving reward and is_terminals:
-            memory.rewards.append(reward)
-            memory.is_terminals.append(done)
-
-            # update if its time
-            if time_step % update_timestep == 0:
-                ppo.update(memory)
-                memory.clear_memory()
-                time_step = 0
             running_reward += reward
-            if render:
-                env.render()
-            if done:
-                break
-
-        avg_length += t
-        writer.add_scalar('rewards', reward, i_episode)
-        # stop training if avg_reward > solved_reward
-        if running_reward > (log_interval * solved_reward):
-            print("########## Solved! ##########")
-            torch.save(ppo.policy.state_dict(), './PPO_continuous_solved_{}.pth'.format(group_name))
-            break
-
-        # save every 500 episodes
-        if i_episode % 500 == 0:
-            torch.save(ppo.policy.state_dict(), './PPO_continuous_{}.pth'.format(group_name))
-
-        # logging
-        if i_episode % log_interval == 0:
-            avg_length = int(avg_length / log_interval)
-            running_reward = int((running_reward / log_interval))
-
-            print('Episode {} \t Avg length: {} \t Avg reward: {}'.format(i_episode, avg_length, running_reward))
-            running_reward = 0
-            avg_length = 0
 
 
 
