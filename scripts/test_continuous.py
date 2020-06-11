@@ -2,7 +2,7 @@
 import rospy
 from std_msgs.msg import String
 from geometry_msgs.msg import PoseStamped, TwistStamped #4 Angle Data to 3
-from sensor_msgs.msg import LaserScan #20 LAser Data
+from sensor_msgs.msg import LaserScan, Imu #20 LAser Data
 import torch
 import torch.nn as nn
 from torch.distributions import MultivariateNormal
@@ -157,28 +157,31 @@ class Node():
         self.TargetDist=0
         self.TargetPos = [1.6,3.6]
         # Node cycle rate (in Hz).
-        loop_rate = rospy.Rate(100)
+        loop_rate = rospy.Rate(1)
         string = String()
         laser = LaserScan()
+        imu = Imu()
         Posedata = PoseStamped() 
         Veldata = TwistStamped()
         # Publishers
-        #self.pub = rospy.Publisher("~chatter1", std_msgs.msg.Float64, queue_size=10)
+        self.pub = rospy.Publisher("/mavros/local_position/pose", PoseStamped, queue_size=None)
+        
         # Subscribers
         rospy.Subscriber("/UWBPosition", String, self.callback_Pos) 
         rospy.Subscriber("/scan", LaserScan, self.callback_range) #RayinformContain
-        rospy.Subscriber("/mavros/local_position/pose", PoseStamped, self.callback_RPY) #CrntAngle
+        rospy.Subscriber("/mavros/imu/data", Imu, self.callback_RPY) #CrntAngle
         rospy.Subscriber("/mavros/local_position/velocity_body", TwistStamped, self.callback_Vel) #CrntDir
+        #rospy.Subscriber("/mavros/local_position/velocity_body", TwistStamped, self.callback_Vel) #CrntDir
         #rospy.Subscriber("~chatter2", std_msgs.msg.Float64, self.callback) 
 
     def callback_Pos(self,string):   
         #self.str = ""
         self.UWBPos=tuple(map(float, string.data.split(',')))
         targetdir = np.array([self.TargetPos[0]-self.UWBPos[0],self.TargetPos[1]-self.UWBPos[1]])
-        self.TargetDist = np.linalg.norm(targetdir)/(1+Abs(np.linalg.norm(targetdir)))
+        self.TargetDist = np.linalg.norm(targetdir)/(1+abs(np.linalg.norm(targetdir)))
         self.TargetPolar = (atan2(self.Dir[1],self.Dir[0]) - atan2(targetdir[1],targetdir[0]))/pi
         #print("targetdir:",targetdir,"Dir:",self.Dir)
-        print("UWB:",self.UWBPos,"TPOLAR:",self.TargetPolar,"TDist:",self.TargetDist)
+        #print("UWB:",self.UWBPos,"TPOLAR:",self.TargetPolar,"TDist:",self.TargetDist)
     def callback_Vel(self, Veldata):
         n = np.array([Veldata.twist.linear.x, Veldata.twist.linear.y])
         self.Mag = np.linalg.norm(n)
@@ -188,13 +191,16 @@ class Node():
         for i in range(12):
             self.LaserData[i] = laser.ranges[i*20]
         #print("Laser:",tuple(self.LaserData))    
-    def callback_RPY(self, Posedata): 
-        q = Quaternion(Posedata.pose.orientation.w,Posedata.pose.orientation.x,\
-            Posedata.pose.orientation.y,Posedata.pose.orientation.z)
+    def callback_RPY(self, imu): 
+        q = Quaternion(imu.orientation.w,imu.orientation.x,\
+            imu.orientation.y,imu.orientation.z)
         self.Pos = q.to_euler(degrees=True)
         print("Pose:",self.Pos) 
 
     def Start(self): 
+        P = PoseStamped() 
+
+        self.pub.publish()
         rospy.spin()
  
 
@@ -218,27 +224,12 @@ def main():
 
     random_seed = None
     #############################################
-    writer = SummaryWriter('runs/PPO_continuous_1')
-    # creating environment
-    engine_configuration_channel = EngineConfigurationChannel()
-    env = UnityEnvironment(file_name=None, base_port=5004, seed=1, side_channels=[engine_configuration_channel])
-    # Reset the environment
-    env.reset()
-
-    # Set the default brain to work with
-    group_name = env.get_agent_groups()[0]
-    group_spec = env.get_agent_group_spec(group_name)
-
-    # Set the time scale of the engine
-    engine_configuration_channel.set_configuration_parameters(time_scale=30)
-
-    # Get the state of the agents
-    step_result = env.get_step_result(group_name)
+    #writer = SummaryWriter('runs/PPO_continuous_1')
 
     # Set the number of actions or action size
-    action_dim = group_spec.action_size
+    action_dim = 3
     # Set the size of state observations or state size
-    state_dim = step_result.obs[0].shape[1]
+    state_dim = 19
 
     memory = Memory()
     ppo = PPO(state_dim, action_dim, action_std, lr, betas, gamma, K_epochs, eps_clip)
@@ -309,7 +300,6 @@ if __name__ == '__main__':
     rospy.init_node('listener', anonymous=True) 
     my_node = Node()
     my_node.Start()
-    #listener()
     #main()
 
 
