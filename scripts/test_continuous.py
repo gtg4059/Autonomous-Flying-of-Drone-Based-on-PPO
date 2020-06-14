@@ -10,6 +10,7 @@ from math import *
 #import gym
 import numpy as np
 from squaternion import Quaternion
+from torch2trt import TRTModule
 #from torch.utils.tensorboard import SummaryWriter
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -229,9 +230,14 @@ def main():
     # Set the size of state observations or state size
     state_dim = 19
 
+    # filename and directory to load model from
+    filename = "PPO_continuous_DR.pth"
+    directory = "./scripts/"
+
     memory = Memory()
     ppo = PPO(state_dim, action_dim, action_std, lr, betas, gamma, K_epochs, eps_clip)
-    ppo.policy_old.load_state_dict(torch.load(directory + filename))
+    model_trt = TRTModule()
+    ppo.policy_old.load_state_dict(model_trt.load_state_dict(torch.load(directory + filename)))
     print(lr, betas)
 
     # logging variables
@@ -251,7 +257,7 @@ def main():
         for t in range(max_timesteps):
             time_step += 1
             # Running policy_old:
-            action = ppo.select_action(state, memory)
+            action = ppo.policy_old.act(state, memory)
             #actions = action.reshape((1,) + action.shape)
             #env.set_actions(group_name, actions)
             #env.step()
