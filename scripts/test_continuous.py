@@ -146,6 +146,7 @@ class PPO:
         # Copy new weights into old policy:
         self.policy_old.load_state_dict(self.policy.state_dict())
 
+
 class Node():
     def __init__(self):
         # Params
@@ -237,12 +238,9 @@ def main():
     memory = Memory()
     ppo = PPO(state_dim, action_dim, action_std, lr, betas, gamma, K_epochs, eps_clip)
     model_trt = TRTModule()
-    ppo.policy_old.load_state_dict(model_trt.load_state_dict(torch.load(directory + filename)))
-    print(lr, betas)
-
-    # logging variables
-    running_reward = 0
-    avg_length = 0
+    a=torch.load(directory + filename)
+    model_trt.load_state_dict(a)
+    ppo.policy_old.load_state_dict(a)
     time_step = 0
 
     rospy.init_node('listener', anonymous=True) 
@@ -257,7 +255,7 @@ def main():
         for t in range(max_timesteps):
             time_step += 1
             # Running policy_old:
-            action = ppo.policy_old.act(state, memory)
+            action = ppo.select_action(state, memory)
             #actions = action.reshape((1,) + action.shape)
             #env.set_actions(group_name, actions)
             #env.step()
