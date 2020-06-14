@@ -151,28 +151,26 @@ class Node():
         self.LaserData=np.zeros(12) #12
         self.TargetPolar = 0
         self.UWBPos=(0,0) #2
-        self.Pos=(0,0,0)
+        self.RPY=(0,0,0)
         self.Dir=(0,0)
         self.Mag=0
         self.TargetDist=0
         self.TargetPos = [1.6,3.6]
         # Node cycle rate (in Hz).
-        loop_rate = rospy.Rate(1)
+        loop_rate = rospy.Rate(1000)
         string = String()
         laser = LaserScan()
         imu = Imu()
         Posedata = PoseStamped() 
         Veldata = TwistStamped()
         # Publishers
-        self.pub = rospy.Publisher("/mavros/local_position/pose", PoseStamped, queue_size=None)
+        #self.pub = rospy.Publisher("/mavros/local_position/pose", PoseStamped, queue_size=None)
         
         # Subscribers
         rospy.Subscriber("/UWBPosition", String, self.callback_Pos) 
         rospy.Subscriber("/scan", LaserScan, self.callback_range) #RayinformContain
         rospy.Subscriber("/mavros/imu/data", Imu, self.callback_RPY) #CrntAngle
         rospy.Subscriber("/mavros/local_position/velocity_body", TwistStamped, self.callback_Vel) #CrntDir
-        #rospy.Subscriber("/mavros/local_position/velocity_body", TwistStamped, self.callback_Vel) #CrntDir
-        #rospy.Subscriber("~chatter2", std_msgs.msg.Float64, self.callback) 
 
     def callback_Pos(self,string):   
         #self.str = ""
@@ -181,7 +179,7 @@ class Node():
         self.TargetDist = np.linalg.norm(targetdir)/(1+abs(np.linalg.norm(targetdir)))
         self.TargetPolar = (atan2(self.Dir[1],self.Dir[0]) - atan2(targetdir[1],targetdir[0]))/pi
         #print("targetdir:",targetdir,"Dir:",self.Dir)
-        #print("UWB:",self.UWBPos,"TPOLAR:",self.TargetPolar,"TDist:",self.TargetDist)
+        print("UWB:",self.UWBPos,"TPOLAR:",self.TargetPolar,"TDist:",self.TargetDist)
     def callback_Vel(self, Veldata):
         n = np.array([Veldata.twist.linear.x, Veldata.twist.linear.y])
         self.Mag = np.linalg.norm(n)
@@ -195,13 +193,14 @@ class Node():
         q = Quaternion(imu.orientation.w,imu.orientation.x,\
             imu.orientation.y,imu.orientation.z)
         e = q.to_euler(degrees=True)
+        self.RPY = (e[0]/180, e[1]/180, e[2]/180) 
         #self.Pos=(eq[0],eq[1],eq[2])*pi/180
-        print("Pose:",e) 
+        #print("Pose:",self.RPY) 
 
-    def Start(self): 
-        P = PoseStamped() 
-        self.pub.publish()
-        rospy.spin()
+    # def Start(self): 
+    #     P = PoseStamped() 
+    #     #self.pub.publish()
+    #     rospy.spin()
  
 
 
@@ -240,31 +239,34 @@ def main():
     avg_length = 0
     time_step = 0
 
+    rospy.init_node('listener', anonymous=True) 
+    nd = Node()
+    
     # training loop
     for i_episode in range(1, max_episodes + 1):
-        env.reset()
-        step_result = env.get_step_result(group_name)
-        state = step_result.obs[0]
+        #env.reset()
+        #step_result = env.get_step_result(group_name)
+        state = nd.LaserData+nd.TargetPolar+nd.TargetDist+nd.Mag+nd.Dir+nd.TargetPos#step_result.obs[0]
+
         for t in range(max_timesteps):
             time_step += 1
             # Running policy_old:
             action = ppo.select_action(state, memory)
-            actions = action.reshape((1,) + action.shape)
-            env.set_actions(group_name, actions)
-            env.step()
-            step_result = env.get_step_result(group_name)
-            state = step_result.obs[0][0]  # get the next states for each unity agent in the environment
-            reward = step_result.reward[0]  # get the rewards for each unity agent in the environment
-            done = step_result.done[0]  # see if episode has finished for each unity agent in the environment
-
-            running_reward += reward
+            #actions = action.reshape((1,) + action.shape)
+            #env.set_actions(group_name, actions)
+            #env.step()
+            #step_result = env.get_step_result(group_name)
+            if time_step > action[3]:
+                state = 0 #step_result.obs[0][0]  # get the next states for each unity agent in the environment
+                my_node.loop_rate.sleep()
+            #reward = step_result.reward[0]  # get the rewards for each unity agent in the environment
+            #done = step_result.done[0]  # see if episode has finished for each unity agent in the environment
+            
+            #running_reward += reward
 
 
 
 if __name__ == '__main__':
-    rospy.init_node('listener', anonymous=True) 
-    my_node = Node()
-    my_node.Start()
-    #main()
+    main()
 
 

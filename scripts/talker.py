@@ -6,12 +6,15 @@ import serial
 import NGD
 
 anc = [[0.01, 0.01, 1.6],
-        [0.01, 7.2, 1.6],
-        [4.05, 0.01, 1.6],
-        [4.05, 7.2, 1.6],
+        [0.01, 7.3, 1.6],
+        [3.23, 0.01, 1.6],
+        [3.23, 7.3, 1.6],
         [6, 0.01, 1.6],
         [6, 7.2, 1.6]]
-ser = serial.Serial(port='/dev/ttyUSB1',baudrate=115200)
+ser = serial.Serial(
+    port='/dev/ttyUWB',
+    baudrate=115200)
+ser.xonxoff=1
 c=NGD.CalculatePosition(anc)
 
 def talker():
@@ -22,8 +25,9 @@ def talker():
         if ser.readable():
             res = ser.readline()
             if len(res.decode().split(','))>=6:
-                c.SumValues(res.decode()[1:len(res)-1])
+                c.SumValues(res.decode()[1:len(res)-2])
         hello_str = "{:f},{:f}".format(c.avg_resultx, c.avg_resulty) 
+        rospy.loginfo(hello_str)
         pub.publish(hello_str)
         rate.sleep()
 
@@ -32,3 +36,12 @@ if __name__ == '__main__':
         talker()
     except rospy.ROSInterruptException:
         pass
+
+
+
+# while True:
+#     if ser.readable():
+#         res = ser.readline()
+#         if len(res.decode().split(','))>=6:
+#             c.SumValues(res.decode()[1:len(res)-2])
+#             print(c.avg_resultx, c.avg_resulty)

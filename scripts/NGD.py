@@ -3,20 +3,15 @@ from math import *
 import numpy as np
 
 class CalculatePosition:
-    def __init__(self):
+    def __init__(self,ap):
         #self.Serialdata
-        self.avg_resultx = 0.01
-        self.avg_resulty = 0.01
-        self.avg_resultz = 1
-        self.anchor_point = [[0.01, 0.01, 1.6],
-                        [0.01, 7.2, 1.6],
-                        [4.05, 0.01, 1.6],
-                        [4.05, 7.2, 1.6],
-                        [6, 0.01, 1.6],
-                        [6, 7.2, 1.6]]
-        self.boundaryXmax = 19.01
+        self.avg_resultx = 0
+        self.avg_resulty = 0
+        self.avg_resultz = 0.71
+        self.anchor_point = ap
+        self.boundaryXmax = 4
         self.boundaryXmin = 0.01
-        self.boundaryYmax = 7.05
+        self.boundaryYmax = 7.3
         self.boundaryYmin = 0.01
 
         self.list_resultx = [0, 0, 0, 0, 0]
@@ -41,14 +36,14 @@ class CalculatePosition:
             anchor_index.append(int(Serialdata[2 * cn])-1)
             anchor_dist.append(Serialdata[2 * cn + 1])
         for cn in range(anchor_cnt):
-            anchor_dist[cn] = abs(pow(anchor_dist[cn], 2) - pow(self.avg_resultz - self.anchor_point[cn][ANCHORz], 2))
+            anchor_dist[cn] = sqrt(pow(anchor_dist[cn], 2) - pow(self.avg_resultz - self.anchor_point[cn][ANCHORz], 2))
         for i in range(100):
             Jdx = 0
             Jdy = 0
             sum_cost = 0
             for k in range(anchor_cnt):
-                d[k] = sqrt(pow(self.anchor_point[k][ANCHORx] - (resultx - momentumSize * vdx), 2)
-                            + pow(self.anchor_point[k][ANCHORy] - (resulty - momentumSize * vdy), 2))
+                d[k] = sqrt(pow(self.anchor_point[anchor_index[k]][ANCHORx] - (resultx - momentumSize * vdx), 2)
+                            + pow(self.anchor_point[anchor_index[k]][ANCHORy] - (resulty - momentumSize * vdy), 2))
                 Jdx += (self.anchor_point[anchor_index[k]][ANCHORx] - (resultx - momentumSize * vdx)) * (d[k] - anchor_dist[k]) / d[k]
                 Jdy += (self.anchor_point[anchor_index[k]][ANCHORy] - (resulty - momentumSize * vdy)) * (d[k] - anchor_dist[k]) / d[k]
                 sum_cost += d[k]
@@ -64,32 +59,29 @@ class CalculatePosition:
                                            and (Jdy < accuracy and Jdy > -1 * accuracy))) and (
                     i > 100)):
                 break
-        resultXList = []
-        resultYList = []
-        resultXList.append(resultx)
-        resultYList.append(resulty)
-
-        # if resultx > boundaryXmin and resultx < boundaryXmax and resulty > boundaryYmin and resulty < boundaryYmax:
-        self.list_resultx.extend([resultx])
-        self.list_resulty.extend([resulty])
-        del self.list_resultx[0]
-        del self.list_resulty[0]
-        self.avg_resultx = np.clip((sum(self.list_resultx) - max(self.list_resultx) - min(self.list_resultx)) / 3.0,
-                              self.boundaryXmin, self.boundaryXmax)
-        self.avg_resulty = np.clip((sum(self.list_resulty) - max(self.list_resulty) - min(self.list_resulty)) / 3.0,
-                              self.boundaryYmin, self.boundaryYmax)
+        
+        if resultx > self.boundaryXmin and resultx < self.boundaryXmax and resulty > self.boundaryYmin and resulty < self.boundaryYmax:
+            self.list_resultx.append(resultx)
+            self.list_resulty.append(resulty)
+            del self.list_resultx[0]
+            del self.list_resulty[0]
+            self.avg_resultx = np.clip((sum(self.list_resultx) - max(self.list_resultx) - min(self.list_resultx)) / 3.0,
+                                self.boundaryXmin, self.boundaryXmax)
+            self.avg_resulty = np.clip((sum(self.list_resulty) - max(self.list_resulty) - min(self.list_resulty)) / 3.0,
+                                self.boundaryYmin, self.boundaryYmax)
 
 # ser = serial.Serial(
 #     port='/dev/ttyUSB1',
 #     baudrate=115200)
-
+# ser.xonxoff=1
 # c=CalculatePosition()
 
 # while True:
 #     if ser.readable():
 #         res = ser.readline()
 #         if len(res.decode().split(','))>=6:
-#             c.SumValues(res.decode()[1:len(res)-1])
+#             a=res.decode()[1:len(res)-2]
+#             c.SumValues(res.decode()[1:len(res)-2])
 #             print(c.avg_resultx, c.avg_resulty)
 
 
