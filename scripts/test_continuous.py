@@ -3,6 +3,7 @@ import rospy
 from std_msgs.msg import String
 from geometry_msgs.msg import PoseStamped, TwistStamped #4 Angle Data to 3
 from sensor_msgs.msg import LaserScan, Imu #20 LAser Data
+from mavros_msgs.msg import PositionTarget
 import torch
 import torch.nn as nn
 from torch.distributions import MultivariateNormal
@@ -57,7 +58,7 @@ class ActorCritic(nn.Module):
 
     def act(self, state, memory):
         action_mean = self.actor(state)
-        cov_mat = torch.diag(self.action_var).cpu()
+        cov_mat = torch.diag(self.action_var).cpu()#to(device)
 
         dist = MultivariateNormal(action_mean, cov_mat)
         action = dist.sample()
@@ -73,8 +74,7 @@ class ActorCritic(nn.Module):
         action_mean = self.actor(state)
 
         action_var = self.action_var.expand_as(action_mean)
-        cov_mat = torch.diag_embed(action_var).cpu()
-
+        cov_mat = torch.diag_embed(action_var).to(device)
         dist = MultivariateNormal(action_mean, cov_mat)
 
         action_logprobs = dist.log_prob(action)
@@ -92,16 +92,16 @@ class PPO:
         self.eps_clip = eps_clip
         self.K_epochs = K_epochs
 
-        self.policy = ActorCritic(state_dim, action_dim, action_std).to(device)
+        self.policy = ActorCritic(state_dim, action_dim, action_std).cpu()#.to(device)
         self.optimizer = torch.optim.Adam(self.policy.parameters(), lr=lr, betas=betas)
 
-        self.policy_old = ActorCritic(state_dim, action_dim, action_std).to(device)
+        self.policy_old = ActorCritic(state_dim, action_dim, action_std).cpu()#.to(device)
         self.policy_old.load_state_dict(self.policy.state_dict())
 
         self.MseLoss = nn.MSELoss()
 
     def select_action(self, state, memory):
-        state = torch.FloatTensor(state.reshape(1, -1)).to(device)
+        state = torch.FloatTensor(state.reshape(1, -1)).cpu()#.to(device)
         return self.policy_old.act(state, memory).cpu().data.numpy().flatten()
 
     def update(self, memory):
@@ -158,14 +158,15 @@ class Node():
         self.TargetDist=0
         self.TargetPos = [1.6,3.6]
         # Node cycle rate (in Hz).
-        loop_rate = rospy.Rate(1000)
+        self.loop_rate = rospy.Rate(100)
         string = String()
         laser = LaserScan()
         imu = Imu()
         Posedata = PoseStamped() 
         Veldata = TwistStamped()
+        self.Tpos = PositionTarget()
         # Publishers
-        self.pub = rospy.Publisher("/mavros/local_position/pose", PoseStamped, queue_size=None)
+        self.pub = rospy.Publisher("/mavros/setpoint_raw/target_local", PositionTarget(), queue_size=20)
         
         # Subscribers
         rospy.Subscriber("/UWBPosition", String, self.callback_Pos) 
@@ -263,13 +264,14 @@ def main():
             time_step += 1
             action = ppo.select_action(state, memory)
             
-            P = PoseStamped() 
+            
             q = Quaternion.from_euler(np.clip(action[0]*0.3,-0.05,0.05), np.clip(action[1]*0.3,-0.05,0.05), 0, degrees=True)
-            P.pose.orientation.x = q.x
-            P.pose.orientation.y = q.y
-            P.pose.orientation.z = q.z
-            P.pose.orientation.w = q.w
-            nd.pub.publish(P)
+            nd.Tpos.position.x = np.clip(action[0]*0.3,-0.05,0.05)
+            nd.Tpos.position.y = np.clip(action[1]*0.3,-0.05,0.05)
+            nd.Tpos.position.z = 1.5
+            nd.Tpos.header.stamp = rospy.Time.now()
+            
+            nd.pub.publish(Tpos)
 
             if time_step > (action[2]+1)*10+1:
                 state=[]
@@ -280,8 +282,8 @@ def main():
                 state.extend(nd.Dir)
                 state.extend(nd.TargetPos)
                 state = np.array(state)
-                print(P) 
-            my_node.loop_rate.sleep()
+                print(q.x, q.y) 
+                nd.loop_rate.sleep()
 
 
 
