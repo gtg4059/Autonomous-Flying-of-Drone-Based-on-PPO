@@ -10,7 +10,6 @@ from math import *
 #import gym
 import numpy as np
 from squaternion import Quaternion
-from torch2trt import TRTModule
 #from torch.utils.tensorboard import SummaryWriter
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -58,7 +57,7 @@ class ActorCritic(nn.Module):
 
     def act(self, state, memory):
         action_mean = self.actor(state)
-        cov_mat = torch.diag(self.action_var).to(device)
+        cov_mat = torch.diag(self.action_var).cpu()
 
         dist = MultivariateNormal(action_mean, cov_mat)
         action = dist.sample()
@@ -74,7 +73,7 @@ class ActorCritic(nn.Module):
         action_mean = self.actor(state)
 
         action_var = self.action_var.expand_as(action_mean)
-        cov_mat = torch.diag_embed(action_var).to(device)
+        cov_mat = torch.diag_embed(action_var).cpu()
 
         dist = MultivariateNormal(action_mean, cov_mat)
 
@@ -153,8 +152,8 @@ class Node():
         self.LaserData=np.zeros(12) #12
         self.TargetPolar = 0
         self.UWBPos=(0,0) #2
-        self.RPY=(0,0,0)
-        self.Dir=(0,0)
+        self.RPY=[0,0,0]
+        self.Dir=[0,0]
         self.Mag=0
         self.TargetDist=0
         self.TargetPos = [1.6,3.6]
@@ -166,7 +165,7 @@ class Node():
         Posedata = PoseStamped() 
         Veldata = TwistStamped()
         # Publishers
-        #self.pub = rospy.Publisher("/mavros/local_position/pose", PoseStamped, queue_size=None)
+        self.pub = rospy.Publisher("/mavros/local_position/pose", PoseStamped, queue_size=None)
         
         # Subscribers
         rospy.Subscriber("/UWBPosition", String, self.callback_Pos) 
@@ -181,7 +180,7 @@ class Node():
         self.TargetDist = np.linalg.norm(targetdir)/(1+abs(np.linalg.norm(targetdir)))
         self.TargetPolar = (atan2(self.Dir[1],self.Dir[0]) - atan2(targetdir[1],targetdir[0]))/pi
         #print("targetdir:",targetdir,"Dir:",self.Dir)
-        print("UWB:",self.UWBPos,"TPOLAR:",self.TargetPolar,"TDist:",self.TargetDist)
+        #print("UWB:",self.UWBPos,"TPOLAR:",self.TargetPolar,"TDist:",self.TargetDist)
     def callback_Vel(self, Veldata):
         n = np.array([Veldata.twist.linear.x, Veldata.twist.linear.y])
         self.Mag = np.linalg.norm(n)
@@ -195,13 +194,18 @@ class Node():
         q = Quaternion(imu.orientation.w,imu.orientation.x,\
             imu.orientation.y,imu.orientation.z)
         e = q.to_euler(degrees=True)
-        self.RPY = (e[0]/180, e[1]/180, e[2]/180) 
+        self.RPY = [e[0]/180, e[1]/180, e[2]/180]
         #self.Pos=(eq[0],eq[1],eq[2])*pi/180
         #print("Pose:",self.RPY) 
 
     # def Start(self): 
     #     P = PoseStamped() 
-    #     #self.pub.publish()
+    #     q = Quaternion.from_euler(action, 5, 0, degrees=True)
+    #     P.pose.orientation.x = q.x
+    #     P.pose.orientation.y = q.y
+    #     P.pose.orientation.z = q.z
+    #     P.pose.orientation.w = q.w
+    #     self.pub.publish(P)
     #     rospy.spin()
  
 
@@ -237,36 +241,47 @@ def main():
 
     memory = Memory()
     ppo = PPO(state_dim, action_dim, action_std, lr, betas, gamma, K_epochs, eps_clip)
-    model_trt = TRTModule()
-    a=torch.load(directory + filename)
-    model_trt.load_state_dict(a)
-    ppo.policy_old.load_state_dict(a)
+    ppo.policy_old.load_state_dict(torch.load(directory + filename))
     time_step = 0
-
     rospy.init_node('listener', anonymous=True) 
     nd = Node()
-    
+
     # training loop
     for i_episode in range(1, max_episodes + 1):
         #env.reset()
         #step_result = env.get_step_result(group_name)
-        state = nd.LaserData+nd.TargetPolar+nd.TargetDist+nd.Mag+nd.Dir+nd.TargetPos#step_result.obs[0]
+        state=[]
+        state.extend(nd.LaserData)
+        state.append(nd.TargetPolar)
+        state.append(nd.TargetDist)
+        state.append(nd.Mag)
+        state.extend(nd.Dir)
+        state.extend(nd.TargetPos)
+        state = np.array(state)
 
         for t in range(max_timesteps):
             time_step += 1
-            # Running policy_old:
             action = ppo.select_action(state, memory)
-            #actions = action.reshape((1,) + action.shape)
-            #env.set_actions(group_name, actions)
-            #env.step()
-            #step_result = env.get_step_result(group_name)
-            if time_step > action[3]:
-                state = 0 #step_result.obs[0][0]  # get the next states for each unity agent in the environment
-                my_node.loop_rate.sleep()
-            #reward = step_result.reward[0]  # get the rewards for each unity agent in the environment
-            #done = step_result.done[0]  # see if episode has finished for each unity agent in the environment
             
-            #running_reward += reward
+            P = PoseStamped() 
+            q = Quaternion.from_euler(np.clip(action[0]*0.3,-0.05,0.05), np.clip(action[1]*0.3,-0.05,0.05), 0, degrees=True)
+            P.pose.orientation.x = q.x
+            P.pose.orientation.y = q.y
+            P.pose.orientation.z = q.z
+            P.pose.orientation.w = q.w
+            nd.pub.publish(P)
+
+            if time_step > (action[2]+1)*10+1:
+                state=[]
+                state.extend(nd.LaserData)
+                state.append(nd.TargetPolar)
+                state.append(nd.TargetDist)
+                state.append(nd.Mag)
+                state.extend(nd.Dir)
+                state.extend(nd.TargetPos)
+                state = np.array(state)
+                print(P) 
+            my_node.loop_rate.sleep()
 
 
 
