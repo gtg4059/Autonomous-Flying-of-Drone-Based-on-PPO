@@ -165,7 +165,7 @@ class Node():
         Posedata = PoseStamped() 
         Veldata = TwistStamped()
         # Publishers
-        self.pub = rospy.Publisher("/mavros/setpoint_raw/target_local", AttitudeTarget, queue=10)
+        self.pub = rospy.Publisher("/mavros/setpoint_raw/target_local", AttitudeTarget, queue_size=10)
         
         # Subscribers
         rospy.Subscriber("/UWBPosition", String, self.callback_Pos) 
@@ -188,7 +188,17 @@ class Node():
         #print("MAG:",self.Mag,"DIR:",self.Dir)
     def callback_range(self, laser):
         for i in range(12):
-            self.LaserData[i] = laser.ranges[i*20]
+            #self.LaserData[i] = laser.ranges[i*20]
+            if isinf(laser.ranges[(i*20+180)%360])==False and laser.ranges[(i*20+180)%360]!=0:
+                self.LaserData[i] = laser.ranges[(i*20+180)%360]
+            elif isinf(laser.ranges[(i*20-1+180)%360])==False and laser.ranges[(i*20-1+180)%360]!=0:
+                self.LaserData[i] = laser.ranges[(i*20-1+180)%360]
+            elif isinf(laser.ranges[(i*20+1+180)%360])==False and laser.ranges[(i*20+1+180)%360]!=0:
+                self.LaserData[i] = laser.ranges[(i*20+1+180)%360]
+            elif isinf(laser.ranges[(i*20-2+180)%360])==False and laser.ranges[(i*20-2+180)%360]!=0:
+                self.LaserData[i] = laser.ranges[(i*20-2+180)%360]
+            elif isinf(laser.ranges[(i*20+2+180)%360])==False and laser.ranges[(i*20+2+180)%360]!=0:
+                self.LaserData[i] = laser.ranges[(i*20+2+180)%360]
         #print("Laser:",tuple(self.LaserData))    
     def callback_RPY(self, imu): 
         q = Quaternion(imu.orientation.w,imu.orientation.x,\
@@ -251,7 +261,7 @@ def main():
         #env.reset()
         #step_result = env.get_step_result(group_name)
         state=[]
-        state.extend(nd.LaserData)
+        state.extend([5,5,5,5,5,5,5,5,5,5,10,10])#nd.LaserData
         state.append(nd.TargetPolar)
         state.append(nd.TargetDist)
         state.append(nd.Mag)
@@ -262,9 +272,9 @@ def main():
         for t in range(max_timesteps):
             time_step += 1
             action = ppo.select_action(state, memory)
-            
-            
-            q = Quaternion.from_euler(np.clip(action[0]*0.3,-0.05,0.05), np.clip(action[1]*0.3,-0.05,0.05), 0, degrees=True)
+            roll=-1*np.clip(action[0]*0.3,-0.05,0.05)*180/pi
+            pitch=np.clip(action[1]*0.3,-0.05,0.05)*180/pi
+            q = Quaternion.from_euler(roll, pitch, 90, degrees=True)
             A = AttitudeTarget()
             A.orientation.w = q.w
             A.orientation.x = q.x
@@ -275,14 +285,15 @@ def main():
 
             if time_step > (action[2]+1)*10+1:
                 state=[]
-                state.extend(nd.LaserData)
+                state.extend([5,5,5,5,5,5,5,5,5,5,10,10])
                 state.append(nd.TargetPolar)
                 state.append(nd.TargetDist)
                 state.append(nd.Mag)
                 state.extend(nd.Dir)
                 state.extend(nd.TargetPos)
                 state = np.array(state)
-                print(q.x, q.y) 
+                print(roll,pitch) 
+                time_step=0
                 nd.loop_rate.sleep()
 
 
