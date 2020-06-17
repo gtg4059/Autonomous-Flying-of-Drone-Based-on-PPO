@@ -3,7 +3,7 @@ import rospy
 from std_msgs.msg import String
 from geometry_msgs.msg import PoseStamped, TwistStamped #4 Angle Data to 3
 from sensor_msgs.msg import LaserScan, Imu #20 LAser Data
-from mavros_msgs.msg import PositionTarget
+from mavros_msgs.msg import AttitudeTarget
 import torch
 import torch.nn as nn
 from torch.distributions import MultivariateNormal
@@ -58,7 +58,7 @@ class ActorCritic(nn.Module):
 
     def act(self, state, memory):
         action_mean = self.actor(state)
-        cov_mat = torch.diag(self.action_var).cpu()#to(device)
+        cov_mat = torch.diag(self.action_var).to(device)
 
         dist = MultivariateNormal(action_mean, cov_mat)
         action = dist.sample()
@@ -92,16 +92,16 @@ class PPO:
         self.eps_clip = eps_clip
         self.K_epochs = K_epochs
 
-        self.policy = ActorCritic(state_dim, action_dim, action_std).cpu()#.to(device)
+        self.policy = ActorCritic(state_dim, action_dim, action_std).to(device)
         self.optimizer = torch.optim.Adam(self.policy.parameters(), lr=lr, betas=betas)
 
-        self.policy_old = ActorCritic(state_dim, action_dim, action_std).cpu()#.to(device)
+        self.policy_old = ActorCritic(state_dim, action_dim, action_std).to(device)
         self.policy_old.load_state_dict(self.policy.state_dict())
 
         self.MseLoss = nn.MSELoss()
 
     def select_action(self, state, memory):
-        state = torch.FloatTensor(state.reshape(1, -1)).cpu()#.to(device)
+        state = torch.FloatTensor(state.reshape(1, -1)).to(device)
         return self.policy_old.act(state, memory).cpu().data.numpy().flatten()
 
     def update(self, memory):
@@ -164,9 +164,8 @@ class Node():
         imu = Imu()
         Posedata = PoseStamped() 
         Veldata = TwistStamped()
-        self.Tpos = PositionTarget()
         # Publishers
-        self.pub = rospy.Publisher("/mavros/setpoint_raw/target_local", PositionTarget(), queue_size=20)
+        self.pub = rospy.Publisher("/mavros/setpoint_raw/target_local", AttitudeTarget, queue=10)
         
         # Subscribers
         rospy.Subscriber("/UWBPosition", String, self.callback_Pos) 
@@ -266,12 +265,13 @@ def main():
             
             
             q = Quaternion.from_euler(np.clip(action[0]*0.3,-0.05,0.05), np.clip(action[1]*0.3,-0.05,0.05), 0, degrees=True)
-            nd.Tpos.position.x = np.clip(action[0]*0.3,-0.05,0.05)
-            nd.Tpos.position.y = np.clip(action[1]*0.3,-0.05,0.05)
-            nd.Tpos.position.z = 1.5
-            nd.Tpos.header.stamp = rospy.Time.now()
-            
-            nd.pub.publish(Tpos)
+            A = AttitudeTarget()
+            A.orientation.w = q.w
+            A.orientation.x = q.x
+            A.orientation.y = q.y
+            A.orientation.z = q.z
+            A.header.stamp = rospy.Time.now()
+            nd.pub.publish(A)
 
             if time_step > (action[2]+1)*10+1:
                 state=[]
