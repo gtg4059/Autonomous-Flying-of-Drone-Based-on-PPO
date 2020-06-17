@@ -152,7 +152,7 @@ class Node():
         self.LaserData=np.zeros(12) #12
         self.TargetPolar = 0
         self.UWBPos=(0,0) #2
-        self.RPY=[0,0,0]
+        self.RPY=[0,0]
         self.Dir=[0,0]
         self.Mag=0
         self.TargetDist=0
@@ -177,8 +177,10 @@ class Node():
         #self.str = ""
         self.UWBPos=tuple(map(float, string.data.split(',')))
         targetdir = np.array([self.TargetPos[0]-self.UWBPos[0],self.TargetPos[1]-self.UWBPos[1]])
-        self.TargetDist = np.linalg.norm(targetdir)/(1+abs(np.linalg.norm(targetdir)))
-        self.TargetPolar = (atan2(self.Dir[1],self.Dir[0]) - atan2(targetdir[1],targetdir[0]))/pi
+        targetdirAngle = atan2(targetdir[1],targetdir[0]) if atan2(targetdir[1],targetdir[0])>=0 else atan2(targetdir[1],targetdir[0])+tau
+        self.TargetDist = np.linalg.norm(targetdir)/(1+abs(np.linalg.norm(targetdir)))*2-1
+        crntAngle = atan2(self.Dir[1],self.Dir[0]) if atan2(self.Dir[1],self.Dir[0])>=0 else atan2(self.Dir[1],self.Dir[0])+tau
+        self.TargetPolar = targetdirAngle - crntAngle if targetdirAngle - crntAngle<pi else targetdirAngle - crntAngle - tau
         #print("targetdir:",targetdir,"Dir:",self.Dir)
         #print("UWB:",self.UWBPos,"TPOLAR:",self.TargetPolar,"TDist:",self.TargetDist)
     def callback_Vel(self, Veldata):
@@ -204,7 +206,7 @@ class Node():
         q = Quaternion(imu.orientation.w,imu.orientation.x,\
             imu.orientation.y,imu.orientation.z)
         e = q.to_euler(degrees=True)
-        self.RPY = [e[0]/180, e[1]/180, e[2]/180]
+        self.RPY = [e[0]/180, e[1]/180]
         #self.Pos=(eq[0],eq[1],eq[2])*pi/180
         #print("Pose:",self.RPY) 
 
@@ -262,11 +264,11 @@ def main():
         #step_result = env.get_step_result(group_name)
         state=[]
         state.extend([5,5,5,5,5,5,5,5,5,5,10,10])#nd.LaserData
-        state.append(nd.TargetPolar)
+        state.append(nd.TargetPolar/tau)
         state.append(nd.TargetDist)
-        state.append(nd.Mag)
+        state.append(nd.Mag/20)
         state.extend(nd.Dir)
-        state.extend(nd.TargetPos)
+        state.extend(nd.RPY)
         state = np.array(state)
 
         for t in range(max_timesteps):
@@ -286,11 +288,11 @@ def main():
             if time_step > (action[2]+1)*10+1:
                 state=[]
                 state.extend([5,5,5,5,5,5,5,5,5,5,10,10])
-                state.append(nd.TargetPolar)
+                state.append(nd.TargetPolar/tau)
                 state.append(nd.TargetDist)
-                state.append(nd.Mag)
+                state.append(nd.Mag/20)
                 state.extend(nd.Dir)
-                state.extend(nd.TargetPos)
+                state.extend(nd.RPY)
                 state = np.array(state)
                 print(roll,pitch) 
                 time_step=0
