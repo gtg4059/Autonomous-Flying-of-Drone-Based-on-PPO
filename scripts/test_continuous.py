@@ -156,9 +156,9 @@ class Node():
         self.Dir=[0,0]
         self.Mag=0
         self.TargetDist=0
-        self.TargetPos = [1.6,3.6]
+        self.TargetPos = [3.2,7.2]
         # Node cycle rate (in Hz).
-        self.loop_rate = rospy.Rate(100)
+        self.loop_rate = rospy.Rate(50)
         string = String()
         laser = LaserScan()
         imu = Imu()
@@ -201,6 +201,8 @@ class Node():
                 self.LaserData[i] = laser.ranges[(i*20-2+180)%360]
             elif isinf(laser.ranges[(i*20+2+180)%360])==False and laser.ranges[(i*20+2+180)%360]!=0:
                 self.LaserData[i] = laser.ranges[(i*20+2+180)%360]
+            else: 
+                self.LaserData[i] = 0.5
         #print("Laser:",tuple(self.LaserData))    
     def callback_RPY(self, imu): 
         q = Quaternion(imu.orientation.w,imu.orientation.x,\
