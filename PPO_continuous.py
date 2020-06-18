@@ -1,9 +1,8 @@
 import torch
 import torch.nn as nn
 from torch.distributions import MultivariateNormal
-from mlagents_envs.environment import UnityEnvironment
-from mlagents_envs.side_channel.engine_configuration_channel import EngineConfig, EngineConfigurationChannel
-from torch.utils.tensorboard import SummaryWriter
+import gym
+import numpy as np
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -142,10 +141,11 @@ class PPO:
 
 def main():
     ############## Hyperparameters ##############
+    env_name = "BipedalWalker-v3"
     render = False
     solved_reward = 300  # stop training if avg_reward > solved_reward
     log_interval = 20  # print avg reward in the interval
-    max_episodes = 50000  # max training episodes
+    max_episodes = 10000  # max training episodes
     max_timesteps = 1500  # max timesteps in one episode
 
     update_timestep = 4000  # update policy every n timesteps
@@ -159,27 +159,17 @@ def main():
 
     random_seed = None
     #############################################
-    writer = SummaryWriter('runs/PPO_continuous_1')
+
     # creating environment
-    engine_configuration_channel = EngineConfigurationChannel()
-    env = UnityEnvironment(file_name=None, base_port=5004, seed=1, side_channels=[engine_configuration_channel])
-    # Reset the environment
-    env.reset()
+    env = gym.make(env_name)
+    state_dim = env.observation_space.shape[0]
+    action_dim = env.action_space.shape[0]
 
-    # Set the default brain to work with
-    group_name = env.get_agent_groups()[0]
-    group_spec = env.get_agent_group_spec(group_name)
-
-    # Set the time scale of the engine
-    engine_configuration_channel.set_configuration_parameters(time_scale=30)
-
-    # Get the state of the agents
-    step_result = env.get_step_result(group_name)
-
-    # Set the number of actions or action size
-    action_dim = group_spec.action_size
-    # Set the size of state observations or state size
-    state_dim = step_result.obs[0].shape[1]
+    if random_seed:
+        print("Random Seed: {}".format(random_seed))
+        torch.manual_seed(random_seed)
+        env.seed(random_seed)
+        np.random.seed(random_seed)
 
     memory = Memory()
     ppo = PPO(state_dim, action_dim, action_std, lr, betas, gamma, K_epochs, eps_clip)
@@ -192,21 +182,12 @@ def main():
 
     # training loop
     for i_episode in range(1, max_episodes + 1):
-        env.reset()
-        step_result = env.get_step_result(group_name)
-        state = step_result.obs[0]
+        state = env.reset()
         for t in range(max_timesteps):
             time_step += 1
             # Running policy_old:
             action = ppo.select_action(state, memory)
-            actions = action.reshape((1,) + action.shape)
-            env.set_actions(group_name, actions)
-            env.step()
-            step_result = env.get_step_result(group_name)
-            state = step_result.obs[0][0]  # get the next states for each unity agent in the environment
-            reward = step_result.reward[0]  # get the rewards for each unity agent in the environment
-            done = step_result.done[0]  # see if episode has finished for each unity agent in the environment
-            # state, reward, done, _ = env.step(action)
+            state, reward, done, _ = env.step(action)
 
             # Saving reward and is_terminals:
             memory.rewards.append(reward)
@@ -218,20 +199,22 @@ def main():
                 memory.clear_memory()
                 time_step = 0
             running_reward += reward
+            if render:
+                env.render()
             if done:
                 break
 
         avg_length += t
-        writer.add_scalar('rewards', reward, i_episode)
+
         # stop training if avg_reward > solved_reward
         if running_reward > (log_interval * solved_reward):
             print("########## Solved! ##########")
-            torch.save(ppo.policy.state_dict(), './PPO_continuous_DR.pth')
+            torch.save(ppo.policy.state_dict(), './PPO_continuous_solved_{}.pth'.format(env_name))
             break
 
         # save every 500 episodes
         if i_episode % 500 == 0:
-            torch.save(ppo.policy.state_dict(), './PPO_continuous_DR.pth')
+            torch.save(ppo.policy.state_dict(), './PPO_continuous_{}.pth'.format(env_name))
 
         # logging
         if i_episode % log_interval == 0:
@@ -245,4 +228,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
