@@ -167,13 +167,13 @@ class Node():
         string = String()
         laser = LaserScan()
         imu = Imu()
-        Posedata = PoseStamped() 
+        self.Posedata = PoseStamped() 
         Veldata = TwistStamped()
         state = State()
         current_state = State() 
         offb_set_mode = SetMode
         # Publishers
-        self.pub = rospy.Publisher("/mavros/setpoint_raw/target_local", AttitudeTarget, queue_size=10)
+        self.pub = rospy.Publisher("/mavros/setpoint_attitude/attitude", PoseStamped, queue_size=10)
         self.current_state = None
 
         # Subscribers
@@ -223,7 +223,7 @@ class Node():
         self.RPY = [e[0]/180, e[1]/180]
         #self.Pos=(eq[0],eq[1],eq[2])*pi/180
         #print("Pose:",self.RPY) 
-    def state_cb(state):
+    def callback_state(self, state):
         self.current_state = state
 
 
@@ -266,11 +266,7 @@ def main():
     ppo.policy_old.load_state_dict(torch.load(directory + filename))
     time_step = 0
     
-    # wait for FCU connection
-    while not nd.current_state.connected:
-        rate.sleep()
-
-    last_request = rospy.get_rostime()
+    print("ready")
     # while nd.state.mode == "STABILIZED":
     #     nd.loop_rate.sleep()
     # training loop
@@ -291,28 +287,29 @@ def main():
         state.extend(nd.Dir)
         state.extend(nd.RPY)
         state = np.array(state)
-
+        last_request = rospy.get_rostime()
         for t in range(max_timesteps):
-            time_step += 1
-            action = ppo.select_action(state, memory)
-            roll=-1*np.clip(action[0]*0.3,-0.05,0.05)*180/pi*10
-            pitch=np.clip(action[1]*0.3,-0.05,0.05)*180/pi*10
-            q = Quaternion.from_euler(roll, pitch, 90, degrees=True)
-            A = AttitudeTarget()
-            A.orientation.w = q.w
-            A.orientation.x = q.x
-            A.orientation.y = q.y
-            A.orientation.z = q.z
-            A.header.stamp = rospy.Time.now()
-            nd.pub.publish(A)
             now = rospy.get_rostime()
             if nd.current_state.mode != "OFFBOARD" and (now - last_request > rospy.Duration(5.)):
                 nd.set_mode_client(base_mode=0, custom_mode="OFFBOARD")
                 last_request = now 
             else:
                 if not nd.current_state.armed and (now - last_request > rospy.Duration(5.)):
-                nd.arming_client(True)
-                last_request = now 
+                    nd.arming_client(True)
+                    last_request = now 
+            
+            time_step += 1
+            action = ppo.select_action(state, memory)
+            roll=-1*np.clip(action[0]*0.3,-0.05,0.05)*180/pi*10
+            pitch=np.clip(action[1]*0.3,-0.05,0.05)*180/pi*10
+            q = Quaternion.from_euler(roll, pitch, 90, degrees=True)
+            nd.Posedata.pose.orientation.w = q.w
+            nd.Posedata.pose.orientation.x = q.x
+            nd.Posedata.pose.orientation.y = q.y
+            nd.Posedata.pose.orientation.z = q.z
+            nd.Posedata.header.stamp = rospy.Time.now()
+            nd.pub.publish(nd.Posedata)
+            #now = rospy.get_rostime()
             if time_step > (action[2]+1)*10+1:
                 state=[]
                 # state.extend([5,5,5,5,5,5,5,5,5,5,10,10])
@@ -330,6 +327,7 @@ def main():
                 state = np.array(state)
                 print(roll,pitch) 
                 time_step=0
+                
                 
                 nd.loop_rate.sleep()
 
