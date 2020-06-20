@@ -170,7 +170,7 @@ def main():
     group_spec = env.get_agent_group_spec(group_name)
 
     # Set the time scale of the engine
-    engine_configuration_channel.set_configuration_parameters(time_scale=30)
+    engine_configuration_channel.set_configuration_parameters(time_scale=100)
 
     # Get the state of the agents
     step_result = env.get_step_result(group_name)
