@@ -1,9 +1,10 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import rospy
 from geometry_msgs.msg import PoseStamped
-from mavros_msgs.msg import State 
+from mavros_msgs.msg import State, Thrust
 from mavros_msgs.srv import CommandBool, SetMode
+from squaternion import Quaternion
 
 # callback method for state sub
 current_state = State() 
@@ -12,23 +13,34 @@ def state_cb(state):
     global current_state
     current_state = state
 
-local_pos_pub = rospy.Publisher("/mavros/setpoint_position/local", PoseStamped, queue_size=10)
+#count=0
+#local_pos_pub = rospy.Publisher("/mavros/setpoint_position/local", PoseStamped, queue_size=10)
+local_pos_pub = rospy.Publisher("/mavros/setpoint_attitude/attitude", PoseStamped, queue_size=10)
+local_thr_pub = rospy.Publisher("/mavros/setpoint_attitude/thrust", Thrust, queue_size=10)
 state_sub = rospy.Subscriber("/mavros/state", State, state_cb)
 arming_client = rospy.ServiceProxy("/mavros/cmd/arming", CommandBool)
 set_mode_client = rospy.ServiceProxy("/mavros/set_mode", SetMode) 
 
+T = Thrust()
+T.thrust = 0.2
 pose = PoseStamped()
-pose.pose.position.x = 0
-pose.pose.position.y = 0
-pose.pose.position.z = 2
-
+# pose.pose.position.x = 0
+# pose.pose.position.y = 0
+# pose.pose.position.z = 0
+q = Quaternion.from_euler(30, 30, 90, degrees=True)
+pose.pose.orientation.w = q.w
+pose.pose.orientation.x = q.x
+pose.pose.orientation.y = q.y
+pose.pose.orientation.z = q.z
 def position_control():
+    # global count
     rospy.init_node('offb_node', anonymous=True)
     prev_state = current_state
     rate = rospy.Rate(20.0) # MUST be more then 2Hz
 
     # send a few setpoints before starting
     for i in range(100):
+        local_thr_pub.publish(T)
         local_pos_pub.publish(pose)
         rate.sleep()
     
@@ -56,6 +68,11 @@ def position_control():
 
         # Update timestamp and publish pose 
         pose.header.stamp = rospy.Time.now()
+        T.header.stamp = rospy.Time.now()
+        # pose.header.seq = count
+        # count+=1
+        # pose.header.frame_id="1"
+        local_thr_pub.publish(T)
         local_pos_pub.publish(pose)
         rate.sleep()
 
