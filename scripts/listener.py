@@ -1,43 +1,83 @@
 #!/usr/bin/env python3
+
 import rospy
-from std_msgs.msg import String
 from geometry_msgs.msg import PoseStamped
-from sensor_msgs.msg import LaserScan
+from mavros_msgs.msg import State, Thrust
+from mavros_msgs.srv import CommandBool, SetMode
+from squaternion import Quaternion
 
-# setpoint = PoseStamped()
-# setpioit.pose.orientation.x=10
-# pub_setpoint = rospy.Publisher("mavros/setpoint_position/local",PoseStamped)
+# callback method for state sub
+current_state = State() 
+offb_set_mode = SetMode
+def state_cb(state):
+    global current_state
+    current_state = state
 
-def callback(data):    
-    #print("{}, {}, {}, {}".format(data.pose.orientation.x,data.pose.orientation.y,data.pose.orientation.z,data.pose.orientation.w))
-    self.str = data.pose.orientation.x
-    print(self.str)
-    #asdasdsdasdsadsad
+#count=0
+#local_pos_pub = rospy.Publisher("/mavros/setpoint_position/local", PoseStamped, queue_size=10)
+local_pos_pub = rospy.Publisher("/mavros/setpoint_attitude/attitude", PoseStamped, queue_size=10)
+local_thr_pub = rospy.Publisher("/mavros/setpoint_attitude/thrust", Thrust, queue_size=10)
+state_sub = rospy.Subscriber("/mavros/state", State, state_cb)
+arming_client = rospy.ServiceProxy("/mavros/cmd/arming", CommandBool)
+set_mode_client = rospy.ServiceProxy("/mavros/set_mode", SetMode) 
 
+T = Thrust()
+T.thrust = 0.2
+pose = PoseStamped()
+# pose.pose.position.x = 0
+# pose.pose.position.y = 0
+# pose.pose.position.z = 0
+q = Quaternion.from_euler(30, 30, 90, degrees=True)
+pose.pose.orientation.w = q.w
+pose.pose.orientation.x = q.x
+pose.pose.orientation.y = q.y
+pose.pose.orientation.z = q.z
+def position_control():
+    # global count
+    rospy.init_node('offb_node', anonymous=True)
+    prev_state = current_state
+    rate = rospy.Rate(20.0) # MUST be more then 2Hz
+
+    # send a few setpoints before starting
+    for i in range(100):
+        local_thr_pub.publish(T)
+        local_pos_pub.publish(pose)
+        rate.sleep()
     
-    #print(data.pose.orientation.x)
-    #print(c.avg_resultx, c.avg_resulty)
-    
-def listener():
-    # In ROS, nodes are uniquely named. If two nodes with the same
-    # name are launched, the previous one is kicked off. The
-    # anonymous=True flag means that rospy will choose a unique
-    # name for our 'listener' node so that multiple listeners can
-    # run simultaneously.    
-    
-    rospy.init_node('listener', anonymous=True)
-    data = PoseStamped()
-    laser = LaserScan()
-    laser.ranges
-    data.pose.orientation
-    rospy.Subscriber("/mavros/local_position/pose", PoseStamped, callback) 
-    rospy.spin()
+    # wait for FCU connection
+    while not current_state.connected:
+        rate.sleep()
 
+    last_request = rospy.get_rostime()
+    while not rospy.is_shutdown():
+        now = rospy.get_rostime()
+        if current_state.mode != "OFFBOARD" and (now - last_request > rospy.Duration(5.)):
+            set_mode_client(base_mode=0, custom_mode="OFFBOARD")
+            last_request = now 
+        else:
+            if not current_state.armed and (now - last_request > rospy.Duration(5.)):
+               arming_client(True)
+               last_request = now 
 
-if __name__ == '__main__':  
-    listener() 
-            
-            # define set point
+        # older versions of PX4 always return success==True, so better to check Status instead
+        if prev_state.armed != current_state.armed:
+            rospy.loginfo("Vehicle armed: %r" % current_state.armed)
+        if prev_state.mode != current_state.mode: 
+            rospy.loginfo("Current mode: %s" % current_state.mode)
+        prev_state = current_state
 
-            # pub_setpoint.publish(setpoint)
-    #listener()
+        # Update timestamp and publish pose 
+        pose.header.stamp = rospy.Time.now()
+        T.header.stamp = rospy.Time.now()
+        # pose.header.seq = count
+        # count+=1
+        # pose.header.frame_id="1"
+        local_thr_pub.publish(T)
+        local_pos_pub.publish(pose)
+        rate.sleep()
+
+if __name__ == '__main__':
+    try:
+        position_control()
+    except rospy.ROSInterruptException:
+        pass

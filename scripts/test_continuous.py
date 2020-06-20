@@ -3,7 +3,10 @@ import rospy
 from std_msgs.msg import String
 from geometry_msgs.msg import PoseStamped, TwistStamped #4 Angle Data to 3
 from sensor_msgs.msg import LaserScan, Imu #20 LAser Data
-from mavros_msgs.msg import AttitudeTarget
+from mavros_msgs.msg import AttitudeTarget, State, Thrust
+from mavros_msgs.srv import SetMode, CommandBool
+#from mavros_msgs.srv import CommandBool, SetMode
+import time
 import torch
 import torch.nn as nn
 from torch.distributions import MultivariateNormal
@@ -14,6 +17,8 @@ from squaternion import Quaternion
 #from torch.utils.tensorboard import SummaryWriter
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+
 
 class Memory:
     def __init__(self):
@@ -156,22 +161,30 @@ class Node():
         self.Dir=[0,0]
         self.Mag=0
         self.TargetDist=0
-        self.TargetPos = [3.2,7.2]
+        self.TargetPos = [1.6,3.6]
         # Node cycle rate (in Hz).
         self.loop_rate = rospy.Rate(50)
         string = String()
         laser = LaserScan()
         imu = Imu()
-        Posedata = PoseStamped() 
         Veldata = TwistStamped()
+        state = State()
+        self.current_state = State() 
+        self.offb_set_mode = SetMode
         # Publishers
-        self.pub = rospy.Publisher("/mavros/setpoint_raw/target_local", AttitudeTarget, queue_size=10)
+        #self.pub = rospy.Publisher("/mavros/setpoint_attitude/attitude", PoseStamped, queue_size=10)
+        self.local_pos_pub = rospy.Publisher("/mavros/setpoint_attitude/attitude", PoseStamped, queue_size=10)
+        self.local_thr_pub = rospy.Publisher("/mavros/setpoint_attitude/thrust", Thrust, queue_size=10) 
         
         # Subscribers
         rospy.Subscriber("/UWBPosition", String, self.callback_Pos) 
         rospy.Subscriber("/scan", LaserScan, self.callback_range) #RayinformContain
         rospy.Subscriber("/mavros/imu/data", Imu, self.callback_RPY) #CrntAngle
         rospy.Subscriber("/mavros/local_position/velocity_body", TwistStamped, self.callback_Vel) #CrntDir
+        rospy.Subscriber("/mavros/state",State,self.callback_state)
+        self.arming_client = rospy.ServiceProxy("/mavros/cmd/arming",CommandBool)
+        self.set_mode_client = rospy.ServiceProxy("/mavros/set_mode",SetMode)
+        self.current_state = None
 
     def callback_Pos(self,string):   
         #self.str = ""
@@ -201,6 +214,10 @@ class Node():
                 self.LaserData[i] = laser.ranges[(i*20-2+180)%360]
             elif isinf(laser.ranges[(i*20+2+180)%360])==False and laser.ranges[(i*20+2+180)%360]!=0:
                 self.LaserData[i] = laser.ranges[(i*20+2+180)%360]
+            elif isinf(laser.ranges[(i*20-3+180)%360])==False and laser.ranges[(i*20-3+180)%360]!=0:
+                self.LaserData[i] = laser.ranges[(i*20-3+180)%360]
+            elif isinf(laser.ranges[(i*20+3+180)%360])==False and laser.ranges[(i*20+3+180)%360]!=0:
+                self.LaserData[i] = laser.ranges[(i*20+3+180)%360]
             else: 
                 self.LaserData[i] = 0.5
         #print("Laser:",tuple(self.LaserData))    
@@ -211,17 +228,10 @@ class Node():
         self.RPY = [e[0]/180, e[1]/180]
         #self.Pos=(eq[0],eq[1],eq[2])*pi/180
         #print("Pose:",self.RPY) 
+    def callback_state(self, state):
+        self.current_state = state
 
-    # def Start(self): 
-    #     P = PoseStamped() 
-    #     q = Quaternion.from_euler(action, 5, 0, degrees=True)
-    #     P.pose.orientation.x = q.x
-    #     P.pose.orientation.y = q.y
-    #     P.pose.orientation.z = q.z
-    #     P.pose.orientation.w = q.w
-    #     self.pub.publish(P)
-    #     rospy.spin()
- 
+
 
 
 def main():
@@ -244,6 +254,9 @@ def main():
     random_seed = None
     #############################################
 
+    rospy.init_node('listener', anonymous=True) 
+    nd = Node()
+
     # Set the number of actions or action size
     action_dim = 3
     # Set the size of state observations or state size
@@ -257,41 +270,87 @@ def main():
     ppo = PPO(state_dim, action_dim, action_std, lr, betas, gamma, K_epochs, eps_clip)
     ppo.policy_old.load_state_dict(torch.load(directory + filename))
     time_step = 0
-    rospy.init_node('listener', anonymous=True) 
-    nd = Node()
-
+    T = Thrust()
+    T.thrust = 0.2
+    pose = PoseStamped()
+    q = Quaternion.from_euler(30, 30, 90, degrees=True)
+    pose.pose.orientation.w = q.w
+    pose.pose.orientation.x = q.x
+    pose.pose.orientation.y = q.y
+    pose.pose.orientation.z = q.z
+    prev_state = nd.current_state
+    for i in range(100):
+        nd.local_thr_pub.publish(T)
+        nd.local_pos_pub.publish(pose)
+        nd.loop_rate.sleep()
+    print("ready")
+    # while nd.state.mode == "STABILIZED":
+    #     nd.loop_rate.sleep()
     # training loop
     for i_episode in range(1, max_episodes + 1):
         #env.reset()
         #step_result = env.get_step_result(group_name)
         state=[]
+        # state.extend([5,5,5,5,5,5,5,5,5,5,10,10])#nd.LaserData
+        # state.append(nd.TargetPolar/tau)
+        # state.append(nd.TargetDist)
+        # state.append(nd.Mag/20)
+        # state.extend(nd.Dir)
+        # state.extend(nd.RPY)
         state.extend([5,5,5,5,5,5,5,5,5,5,10,10])#nd.LaserData
-        state.append(nd.TargetPolar/tau)
-        state.append(nd.TargetDist)
+        state.append(0)
+        state.append(3.6)
         state.append(nd.Mag/20)
         state.extend(nd.Dir)
         state.extend(nd.RPY)
         state = np.array(state)
-
+        last_request = rospy.get_rostime()
         for t in range(max_timesteps):
+            
+            
             time_step += 1
             action = ppo.select_action(state, memory)
+            now = rospy.get_rostime()
+            if nd.current_state.mode != "OFFBOARD" and (now - last_request > rospy.Duration(5.)):
+                nd.set_mode_client(base_mode=0, custom_mode="OFFBOARD")
+                last_request = now 
+            else:
+                if not nd.current_state.armed and (now - last_request > rospy.Duration(5.)):
+                    nd.arming_client(True)
+                    last_request = now 
             roll=-1*np.clip(action[0]*0.3,-0.05,0.05)*180/pi
             pitch=np.clip(action[1]*0.3,-0.05,0.05)*180/pi
+            T = Thrust()
+            T.thrust = 0.2
+            pose = PoseStamped()
             q = Quaternion.from_euler(roll, pitch, 90, degrees=True)
-            A = AttitudeTarget()
-            A.orientation.w = q.w
-            A.orientation.x = q.x
-            A.orientation.y = q.y
-            A.orientation.z = q.z
-            A.header.stamp = rospy.Time.now()
-            nd.pub.publish(A)
-
+            pose.pose.orientation.w = q.w
+            pose.pose.orientation.x = q.x
+            pose.pose.orientation.y = q.y
+            pose.pose.orientation.z = q.z
+            pose.header.stamp = rospy.Time.now()
+            T.header.stamp = rospy.Time.now()
+            nd.local_pos_pub.publish(pose)
+            nd.local_thr_pub.publish(T)
+            # q = Quaternion.from_euler(roll, pitch, 90, degrees=True)
+            # nd.Posedata.pose.orientation.w = q.w
+            # nd.Posedata.pose.orientation.x = q.x
+            # nd.Posedata.pose.orientation.y = q.y
+            # nd.Posedata.pose.orientation.z = q.z
+            # nd.Posedata.header.stamp = rospy.Time.now()
+            # nd.pub.publish(nd.Posedata)
+            #now = rospy.get_rostime()
             if time_step > (action[2]+1)*10+1:
                 state=[]
-                state.extend([5,5,5,5,5,5,5,5,5,5,10,10])
-                state.append(nd.TargetPolar/tau)
-                state.append(nd.TargetDist)
+                # state.extend([5,5,5,5,5,5,5,5,5,5,10,10])
+                # state.append(nd.TargetPolar/tau)
+                # state.append(nd.TargetDist)
+                # state.append(nd.Mag/20)
+                # state.extend(nd.Dir)
+                # state.extend(nd.RPY)
+                state.extend([5,5,5,5,5,5,5,5,5,5,10,10])#nd.LaserData
+                state.append(0)
+                state.append(3.6)
                 state.append(nd.Mag/20)
                 state.extend(nd.Dir)
                 state.extend(nd.RPY)
@@ -299,7 +358,6 @@ def main():
                 print(roll,pitch) 
                 time_step=0
                 nd.loop_rate.sleep()
-
 
 
 if __name__ == '__main__':
