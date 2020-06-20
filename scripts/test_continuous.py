@@ -306,6 +306,10 @@ def main():
         state = np.array(state)
         last_request = rospy.get_rostime()
         for t in range(max_timesteps):
+            
+            
+            time_step += 1
+            action = ppo.select_action(state, memory)
             now = rospy.get_rostime()
             if nd.current_state.mode != "OFFBOARD" and (now - last_request > rospy.Duration(5.)):
                 nd.set_mode_client(base_mode=0, custom_mode="OFFBOARD")
@@ -314,13 +318,10 @@ def main():
                 if not nd.current_state.armed and (now - last_request > rospy.Duration(5.)):
                     nd.arming_client(True)
                     last_request = now 
-            
-            time_step += 1
-            action = ppo.select_action(state, memory)
-            roll=-1*np.clip(action[0]*0.3,-0.05,0.05)*180/pi*10
-            pitch=np.clip(action[1]*0.3,-0.05,0.05)*180/pi*10
+            roll=-1*np.clip(action[0]*0.3,-0.05,0.05)*180/pi
+            pitch=np.clip(action[1]*0.3,-0.05,0.05)*180/pi
             T = Thrust()
-            T.thrust = 0.15
+            T.thrust = 0.2
             pose = PoseStamped()
             q = Quaternion.from_euler(roll, pitch, 90, degrees=True)
             pose.pose.orientation.w = q.w
