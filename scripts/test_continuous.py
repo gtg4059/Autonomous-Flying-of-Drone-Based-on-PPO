@@ -271,9 +271,9 @@ def main():
     ppo.policy_old.load_state_dict(torch.load(directory + filename))
     time_step = 0
     T = Thrust()
-    T.thrust = 0.2
+    T.thrust = 0.25
     pose = PoseStamped()
-    q = Quaternion.from_euler(30, 30, 90, degrees=True)
+    q = Quaternion.from_euler(0, 0, 0, degrees=True)
     pose.pose.orientation.w = q.w
     pose.pose.orientation.x = q.x
     pose.pose.orientation.y = q.y
@@ -291,18 +291,18 @@ def main():
         #env.reset()
         #step_result = env.get_step_result(group_name)
         state=[]
-        # state.extend([5,5,5,5,5,5,5,5,5,5,10,10])#nd.LaserData
-        # state.append(nd.TargetPolar/tau)
-        # state.append(nd.TargetDist)
-        # state.append(nd.Mag/20)
-        # state.extend(nd.Dir)
-        # state.extend(nd.RPY)
-        state.extend([5,5,5,5,5,5,5,5,5,5,10,10])#nd.LaserData
-        state.append(0)
-        state.append(3.6)
+        state.extend(nd.LaserData)#nd.LaserData
+        state.append(nd.TargetPolar/tau)
+        state.append(nd.TargetDist)
         state.append(nd.Mag/20)
         state.extend(nd.Dir)
         state.extend(nd.RPY)
+        # state.extend([5,5,5,5,5,5,5,5,5,5,10,10])#nd.LaserData
+        # state.append(0)
+        # state.append(3.6)
+        # state.append(nd.Mag/20)
+        # state.extend(nd.Dir)
+        # state.extend(nd.RPY)
         state = np.array(state)
         last_request = rospy.get_rostime()
         for t in range(max_timesteps):
@@ -332,28 +332,20 @@ def main():
             T.header.stamp = rospy.Time.now()
             nd.local_pos_pub.publish(pose)
             nd.local_thr_pub.publish(T)
-            # q = Quaternion.from_euler(roll, pitch, 90, degrees=True)
-            # nd.Posedata.pose.orientation.w = q.w
-            # nd.Posedata.pose.orientation.x = q.x
-            # nd.Posedata.pose.orientation.y = q.y
-            # nd.Posedata.pose.orientation.z = q.z
-            # nd.Posedata.header.stamp = rospy.Time.now()
-            # nd.pub.publish(nd.Posedata)
-            #now = rospy.get_rostime()
             if time_step > (action[2]+1)*10+1:
                 state=[]
-                # state.extend([5,5,5,5,5,5,5,5,5,5,10,10])
-                # state.append(nd.TargetPolar/tau)
-                # state.append(nd.TargetDist)
-                # state.append(nd.Mag/20)
-                # state.extend(nd.Dir)
-                # state.extend(nd.RPY)
-                state.extend([5,5,5,5,5,5,5,5,5,5,10,10])#nd.LaserData
-                state.append(0)
-                state.append(3.6)
+                state.extend(nd.LaserData)#nd.LaserData
+                state.append(nd.TargetPolar/tau)
+                state.append(nd.TargetDist)
                 state.append(nd.Mag/20)
                 state.extend(nd.Dir)
                 state.extend(nd.RPY)
+                # state.extend([5,5,5,5,5,5,5,5,5,5,10,10])#nd.LaserData
+                # state.append(0)
+                # state.append(3.6)
+                # state.append(nd.Mag/20)
+                # state.extend(nd.Dir)
+                # state.extend(nd.RPY)
                 state = np.array(state)
                 print(roll,pitch) 
                 time_step=0
