@@ -3,7 +3,7 @@ import rospy
 from std_msgs.msg import String
 from geometry_msgs.msg import PoseStamped, TwistStamped #4 Angle Data to 3
 from sensor_msgs.msg import LaserScan, Imu #20 LAser Data
-from mavros_msgs.msg import AttitudeTarget, State, Thrust
+from mavros_msgs.msg import AttitudeTarget, State, Thrust, RCOut
 from mavros_msgs.srv import SetMode, CommandBool
 #from mavros_msgs.srv import CommandBool, SetMode
 import time
@@ -161,7 +161,8 @@ class Node():
         self.Dir=[0,0]
         self.Mag=0
         self.TargetDist=0
-        self.TargetPos = [1.6,3.6]
+        self.startyaw=0
+        self.TargetPos = [0,0]#[1.45,5.1]
         # Node cycle rate (in Hz).
         self.loop_rate = rospy.Rate(50)
         string = String()
@@ -169,6 +170,7 @@ class Node():
         imu = Imu()
         Veldata = TwistStamped()
         state = State()
+        rcout = RCOut()
         self.current_state = State() 
         self.offb_set_mode = SetMode
         # Publishers
@@ -182,6 +184,7 @@ class Node():
         rospy.Subscriber("/mavros/imu/data", Imu, self.callback_RPY) #CrntAngle
         rospy.Subscriber("/mavros/local_position/velocity_body", TwistStamped, self.callback_Vel) #CrntDir
         rospy.Subscriber("/mavros/state",State,self.callback_state)
+        rospy.Subscriber("/mavros/rc/out",RCOut,self.RCOUT)
         self.arming_client = rospy.ServiceProxy("/mavros/cmd/arming",CommandBool)
         self.set_mode_client = rospy.ServiceProxy("/mavros/set_mode",SetMode)
         self.current_state = None
@@ -191,7 +194,7 @@ class Node():
         self.UWBPos=tuple(map(float, string.data.split(',')))
         targetdir = np.array([self.TargetPos[0]-self.UWBPos[0],self.TargetPos[1]-self.UWBPos[1]])
         targetdirAngle = atan2(targetdir[1],targetdir[0]) if atan2(targetdir[1],targetdir[0])>=0 else atan2(targetdir[1],targetdir[0])+tau
-        self.TargetDist = np.linalg.norm(targetdir)/(1+abs(np.linalg.norm(targetdir)))*2-1
+        self.TargetDist = 2*np.linalg.norm(targetdir)/(1+abs(np.linalg.norm(targetdir)))-1
         crntAngle = atan2(self.Dir[1],self.Dir[0]) if atan2(self.Dir[1],self.Dir[0])>=0 else atan2(self.Dir[1],self.Dir[0])+tau
         self.TargetPolar = targetdirAngle - crntAngle if targetdirAngle - crntAngle<pi else targetdirAngle - crntAngle - tau
         #print("targetdir:",targetdir,"Dir:",self.Dir)
@@ -225,12 +228,15 @@ class Node():
         q = Quaternion(imu.orientation.w,imu.orientation.x,\
             imu.orientation.y,imu.orientation.z)
         e = q.to_euler(degrees=True)
-        self.RPY = [e[0]/180, e[1]/180]
+        self.RPY = [e[0], -e[1]]/np.linalg.norm([e[0], e[1]])
         #self.Pos=(eq[0],eq[1],eq[2])*pi/180
-        #print("Pose:",self.RPY) 
+        self.startyaw = e[2]
+        #print(e[0],-e[1],e[2]) 
     def callback_state(self, state):
         self.current_state = state
-
+    def RCOUT(self, rcout):
+        #print(rcout[0],rcout[1],rcout[2],rcout[3])
+        print(rcout.channels[0],rcout.channels[1],rcout.channels[2],rcout.channels[3])
 
 
 
@@ -271,7 +277,7 @@ def main():
     ppo.policy_old.load_state_dict(torch.load(directory + filename))
     time_step = 0
     T = Thrust()
-    T.thrust = 0.25
+    T.thrust = 0.12
     pose = PoseStamped()
     q = Quaternion.from_euler(0, 0, 0, degrees=True)
     pose.pose.orientation.w = q.w
@@ -297,18 +303,11 @@ def main():
         state.append(nd.Mag/20)
         state.extend(nd.Dir)
         state.extend(nd.RPY)
-        # state.extend([5,5,5,5,5,5,5,5,5,5,10,10])#nd.LaserData
-        # state.append(0)
-        # state.append(3.6)
-        # state.append(nd.Mag/20)
-        # state.extend(nd.Dir)
-        # state.extend(nd.RPY)
         state = np.array(state)
         last_request = rospy.get_rostime()
         for t in range(max_timesteps):
             
-            
-            time_step += 1
+            #time_step += 1
             action = ppo.select_action(state, memory)
             now = rospy.get_rostime()
             if nd.current_state.mode != "OFFBOARD" and (now - last_request > rospy.Duration(5.)):
@@ -318,12 +317,13 @@ def main():
                 if not nd.current_state.armed and (now - last_request > rospy.Duration(5.)):
                     nd.arming_client(True)
                     last_request = now 
-            roll=-1*np.clip(action[0]*0.3,-0.05,0.05)*180/pi
-            pitch=np.clip(action[1]*0.3,-0.05,0.05)*180/pi
+            
+            roll=np.clip(action[0]*0.1,-0.1,0.1)*180/pi
+            pitch=-1*np.clip(action[1]*0.1,-0.1,0.1)*180/pi
             T = Thrust()
-            T.thrust = 0.2
+            T.thrust = 0.12
             pose = PoseStamped()
-            q = Quaternion.from_euler(roll, pitch, 90, degrees=True)
+            q = Quaternion.from_euler(roll, pitch, nd.startyaw, degrees=True)
             pose.pose.orientation.w = q.w
             pose.pose.orientation.x = q.x
             pose.pose.orientation.y = q.y
@@ -332,24 +332,18 @@ def main():
             T.header.stamp = rospy.Time.now()
             nd.local_pos_pub.publish(pose)
             nd.local_thr_pub.publish(T)
-            if time_step > (action[2]+1)*10+1:
-                state=[]
-                state.extend(nd.LaserData)#nd.LaserData
-                state.append(nd.TargetPolar/tau)
-                state.append(nd.TargetDist)
-                state.append(nd.Mag/20)
-                state.extend(nd.Dir)
-                state.extend(nd.RPY)
-                # state.extend([5,5,5,5,5,5,5,5,5,5,10,10])#nd.LaserData
-                # state.append(0)
-                # state.append(3.6)
-                # state.append(nd.Mag/20)
-                # state.extend(nd.Dir)
-                # state.extend(nd.RPY)
-                state = np.array(state)
-                print(roll,pitch) 
-                time_step=0
-                nd.loop_rate.sleep()
+            #if time_step > (action[2]+1)*3+1:
+            state=[]
+            state.extend(nd.LaserData)#nd.LaserData
+            state.append(nd.TargetPolar/tau)
+            state.append(nd.TargetDist)
+            state.append(nd.Mag/20)
+            state.extend(nd.Dir)
+            state.extend(nd.RPY)
+            state = np.array(state)
+            #print(roll,pitch) 
+            #time_step=0
+            nd.loop_rate.sleep()
 
 
 if __name__ == '__main__':
