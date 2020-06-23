@@ -154,17 +154,17 @@ class PPO:
 class Node():
     def __init__(self):
         # Params
-        self.LaserData=np.zeros(12) #12
+        self.LaserData=np.ones(12)/2 #12
         self.TargetPolar = 0
         self.UWBPos=(0,0) #2
         self.RPY=[0,0]
-        self.Dir=[0,0]
+        self.Dir=[1,0]
         self.Mag=0
         self.TargetDist=0
         self.startyaw=0
-        self.TargetPos = [0,0]#[1.45,5.1]
+        self.TargetPos = [3,7]#[1.7,5.7]
         # Node cycle rate (in Hz).
-        self.loop_rate = rospy.Rate(50)
+        self.loop_rate = rospy.Rate(20)
         string = String()
         laser = LaserScan()
         imu = Imu()
@@ -184,7 +184,7 @@ class Node():
         rospy.Subscriber("/mavros/imu/data", Imu, self.callback_RPY) #CrntAngle
         rospy.Subscriber("/mavros/local_position/velocity_body", TwistStamped, self.callback_Vel) #CrntDir
         rospy.Subscriber("/mavros/state",State,self.callback_state)
-        rospy.Subscriber("/mavros/rc/out",RCOut,self.RCOUT)
+        #rospy.Subscriber("/mavros/rc/out",RCOut,self.RCOUT)
         self.arming_client = rospy.ServiceProxy("/mavros/cmd/arming",CommandBool)
         self.set_mode_client = rospy.ServiceProxy("/mavros/set_mode",SetMode)
         self.current_state = None
@@ -196,47 +196,47 @@ class Node():
         targetdirAngle = atan2(targetdir[1],targetdir[0]) if atan2(targetdir[1],targetdir[0])>=0 else atan2(targetdir[1],targetdir[0])+tau
         self.TargetDist = 2*np.linalg.norm(targetdir)/(1+abs(np.linalg.norm(targetdir)))-1
         crntAngle = atan2(self.Dir[1],self.Dir[0]) if atan2(self.Dir[1],self.Dir[0])>=0 else atan2(self.Dir[1],self.Dir[0])+tau
-        self.TargetPolar = targetdirAngle - crntAngle if targetdirAngle - crntAngle<pi else targetdirAngle - crntAngle - tau
+        self.TargetPolar = (targetdirAngle - crntAngle)/pi if targetdirAngle - crntAngle<pi else (targetdirAngle - crntAngle - tau)/pi
         #print("targetdir:",targetdir,"Dir:",self.Dir)
         #print("UWB:",self.UWBPos,"TPOLAR:",self.TargetPolar,"TDist:",self.TargetDist)
     def callback_Vel(self, Veldata):
-        n = np.array([Veldata.twist.linear.x, Veldata.twist.linear.y])
+        n = np.array([-Veldata.twist.linear.y, Veldata.twist.linear.x])
         self.Mag = np.linalg.norm(n)
-        self.Dir = n/self.Mag
+        self.Dir = [1,0]#n/self.Mag
         #print("MAG:",self.Mag,"DIR:",self.Dir)
     def callback_range(self, laser):
         for i in range(12):
             #self.LaserData[i] = laser.ranges[i*20]
-            if isinf(laser.ranges[(i*20+180)%360])==False and laser.ranges[(i*20+180)%360]!=0:
-                self.LaserData[i] = laser.ranges[(i*20+180)%360]
-            elif isinf(laser.ranges[(i*20-1+180)%360])==False and laser.ranges[(i*20-1+180)%360]!=0:
-                self.LaserData[i] = laser.ranges[(i*20-1+180)%360]
-            elif isinf(laser.ranges[(i*20+1+180)%360])==False and laser.ranges[(i*20+1+180)%360]!=0:
-                self.LaserData[i] = laser.ranges[(i*20+1+180)%360]
-            elif isinf(laser.ranges[(i*20-2+180)%360])==False and laser.ranges[(i*20-2+180)%360]!=0:
-                self.LaserData[i] = laser.ranges[(i*20-2+180)%360]
-            elif isinf(laser.ranges[(i*20+2+180)%360])==False and laser.ranges[(i*20+2+180)%360]!=0:
-                self.LaserData[i] = laser.ranges[(i*20+2+180)%360]
-            elif isinf(laser.ranges[(i*20-3+180)%360])==False and laser.ranges[(i*20-3+180)%360]!=0:
-                self.LaserData[i] = laser.ranges[(i*20-3+180)%360]
-            elif isinf(laser.ranges[(i*20+3+180)%360])==False and laser.ranges[(i*20+3+180)%360]!=0:
-                self.LaserData[i] = laser.ranges[(i*20+3+180)%360]
-            else: 
-                self.LaserData[i] = 0.5
-        #print("Laser:",tuple(self.LaserData))    
+            if isinf(laser.ranges[(i*20+90)%360])==False and laser.ranges[(i*20+90)%360]!=0:
+                self.LaserData[i] =1-laser.ranges[(i*20+90)%360]/12
+            elif isinf(laser.ranges[(i*20-1+90)%360])==False and laser.ranges[(i*20-1+90)%360]!=0:
+                self.LaserData[i] =1-laser.ranges[(i*20-1+90)%360]/12
+            elif isinf(laser.ranges[(i*20+1+90)%360])==False and laser.ranges[(i*20+1+90)%360]!=0:
+                self.LaserData[i] =1-laser.ranges[(i*20+1+90)%360]/12
+            elif isinf(laser.ranges[(i*20-2+90)%360])==False and laser.ranges[(i*20-2+90)%360]!=0:
+                self.LaserData[i] =1-laser.ranges[(i*20-2+90)%360]/12
+            elif isinf(laser.ranges[(i*20+2+90)%360])==False and laser.ranges[(i*20+2+90)%360]!=0:
+                self.LaserData[i] =1-laser.ranges[(i*20+2+90)%360]/12
+            elif isinf(laser.ranges[(i*20-3+90)%360])==False and laser.ranges[(i*20-3+90)%360]!=0:
+                self.LaserData[i] =1-laser.ranges[(i*20-3+90)%360]/12
+            elif isinf(laser.ranges[(i*20+3+90)%360])==False and laser.ranges[(i*20+3+90)%360]!=0:
+                self.LaserData[i] =1-laser.ranges[(i*20+3+90)%360]/12
+            #else: 
+                #self.LaserData[i] = 0.5
+        #print("Laser:",self.LaserData[0])    
     def callback_RPY(self, imu): 
         q = Quaternion(imu.orientation.w,imu.orientation.x,\
             imu.orientation.y,imu.orientation.z)
         e = q.to_euler(degrees=True)
-        self.RPY = [e[0], -e[1]]/np.linalg.norm([e[0], e[1]])
+        self.RPY = [e[0], e[1]]/np.linalg.norm([e[0], e[1]])
         #self.Pos=(eq[0],eq[1],eq[2])*pi/180
         self.startyaw = e[2]
-        #print(e[0],-e[1],e[2]) 
+        #print(self.RPY) 
     def callback_state(self, state):
         self.current_state = state
-    def RCOUT(self, rcout):
+    #def RCOUT(self, rcout):
         #print(rcout[0],rcout[1],rcout[2],rcout[3])
-        print(rcout.channels[0],rcout.channels[1],rcout.channels[2],rcout.channels[3])
+    #    print(rcout.channels[0],rcout.channels[1],rcout.channels[2],rcout.channels[3])
 
 
 
@@ -259,7 +259,7 @@ def main():
 
     random_seed = None
     #############################################
-
+    MotorThrust=0.25
     rospy.init_node('listener', anonymous=True) 
     nd = Node()
 
@@ -277,7 +277,7 @@ def main():
     ppo.policy_old.load_state_dict(torch.load(directory + filename))
     time_step = 0
     T = Thrust()
-    T.thrust = 0.12
+    T.thrust = MotorThrust
     pose = PoseStamped()
     q = Quaternion.from_euler(0, 0, 0, degrees=True)
     pose.pose.orientation.w = q.w
@@ -292,38 +292,38 @@ def main():
     print("ready")
     # while nd.state.mode == "STABILIZED":
     #     nd.loop_rate.sleep()
+    StartYaw = nd.startyaw
     # training loop
     for i_episode in range(1, max_episodes + 1):
         #env.reset()
         #step_result = env.get_step_result(group_name)
         state=[]
         state.extend(nd.LaserData)#nd.LaserData
-        state.append(nd.TargetPolar/tau)
+        state.append(nd.TargetPolar)
         state.append(nd.TargetDist)
-        state.append(nd.Mag/20)
+        state.append(nd.Mag)
         state.extend(nd.Dir)
         state.extend(nd.RPY)
         state = np.array(state)
+        action = ppo.select_action(state, memory)
         last_request = rospy.get_rostime()
         for t in range(max_timesteps):
+            time_step += 1
+            if time_step > (action[2]+1)*5+1:
+                action = ppo.select_action(state, memory)
+                #print(action[0],action[1])
+                #print(roll,pitch)
+                time_step = 0
             
-            #time_step += 1
-            action = ppo.select_action(state, memory)
-            now = rospy.get_rostime()
-            if nd.current_state.mode != "OFFBOARD" and (now - last_request > rospy.Duration(5.)):
-                nd.set_mode_client(base_mode=0, custom_mode="OFFBOARD")
-                last_request = now 
-            else:
-                if not nd.current_state.armed and (now - last_request > rospy.Duration(5.)):
-                    nd.arming_client(True)
-                    last_request = now 
-            
-            roll=np.clip(action[0]*0.1,-0.1,0.1)*180/pi
-            pitch=-1*np.clip(action[1]*0.1,-0.1,0.1)*180/pi
+            #action = ppo.select_action(state, memory)
+            # PX4 'back unity action0 1'(-roll)
+            roll=np.clip(action[0]*0.05,-0.05,0.05)*180/pi
+            # PX4 'right unity action1 1'(pitch)
+            pitch=-np.clip(action[1]*0.05,-0.05,0.05)*180/pi
             T = Thrust()
-            T.thrust = 0.12
+            T.thrust = MotorThrust
             pose = PoseStamped()
-            q = Quaternion.from_euler(roll, pitch, nd.startyaw, degrees=True)
+            q = Quaternion.from_euler(roll, pitch, StartYaw, degrees=True)
             pose.pose.orientation.w = q.w
             pose.pose.orientation.x = q.x
             pose.pose.orientation.y = q.y
@@ -332,14 +332,22 @@ def main():
             T.header.stamp = rospy.Time.now()
             nd.local_pos_pub.publish(pose)
             nd.local_thr_pub.publish(T)
-            #if time_step > (action[2]+1)*3+1:
+            now = rospy.get_rostime()
+            if nd.current_state.mode != "OFFBOARD" and (now - last_request > rospy.Duration(5.)):
+                nd.set_mode_client(base_mode=0, custom_mode="OFFBOARD")
+                last_request = now 
+            else:
+                if not nd.current_state.armed and (now - last_request > rospy.Duration(5.)):
+                    nd.arming_client(True)
+                    last_request = now            
             state=[]
             state.extend(nd.LaserData)#nd.LaserData
-            state.append(nd.TargetPolar/tau)
+            state.append(nd.TargetPolar)
             state.append(nd.TargetDist)
-            state.append(nd.Mag/20)
+            state.append(nd.Mag)
             state.extend(nd.Dir)
             state.extend(nd.RPY)
+            #print(state)
             state = np.array(state)
             #print(roll,pitch) 
             #time_step=0
